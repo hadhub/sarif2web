@@ -1,0 +1,29 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  flask:
+    build: .
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/sarif_manager
+    depends_on:
+      - mongo
+    tmpfs:
+      - /tmp/scan_repos:size=2G
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "9090:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - flask
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

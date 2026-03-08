@@ -1,0 +1,182 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Opengrep",
+          "semanticVersion": "1.12.0",
+          "rules": [
+            {
+              "id": "javascript.express.security.audit.xss.mustache-escape",
+              "name": "mustache-escape",
+              "shortDescription": { "text": "Unescaped variable in template" },
+              "fullDescription": { "text": "A variable is rendered with triple braces {{{ }}} in a Mustache/Handlebars template. This bypasses HTML escaping and could lead to Cross-Site Scripting (XSS). Use double braces {{ }} instead." },
+              "helpUri": "https://semgrep.dev/r/javascript.express.security.audit.xss.mustache-escape",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-79", "OWASP-A03:2021", "security", "xss"] }
+            },
+            {
+              "id": "javascript.express.security.audit.path-traversal",
+              "name": "path-traversal",
+              "shortDescription": { "text": "Path traversal in file operations" },
+              "fullDescription": { "text": "User-supplied file path used in fs.readFile() without sanitization. An attacker can use ../ sequences to read arbitrary files from the server filesystem. Use path.resolve() and validate against a base directory." },
+              "helpUri": "https://semgrep.dev/r/javascript.express.security.audit.path-traversal",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-22", "OWASP-A01:2021", "security"] }
+            },
+            {
+              "id": "javascript.lang.security.audit.unsafe-regex",
+              "name": "unsafe-regex",
+              "shortDescription": { "text": "ReDoS: catastrophic backtracking regex" },
+              "fullDescription": { "text": "A regular expression with potential for catastrophic backtracking was found. This can lead to Regular Expression Denial of Service (ReDoS). Simplify the regex or use a timeout." },
+              "helpUri": "https://semgrep.dev/r/javascript.lang.security.audit.unsafe-regex",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-1333", "security", "performance"] }
+            },
+            {
+              "id": "javascript.express.security.cors-misconfiguration",
+              "name": "cors-misconfiguration",
+              "shortDescription": { "text": "CORS allows all origins" },
+              "fullDescription": { "text": "CORS is configured to allow all origins with credentials. This is a security misconfiguration that allows any website to make authenticated requests to your API. Restrict allowed origins to trusted domains." },
+              "helpUri": "https://semgrep.dev/r/javascript.express.security.cors-misconfiguration",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-942", "OWASP-A05:2021", "security", "cors"] }
+            },
+            {
+              "id": "javascript.lang.security.audit.prototype-pollution",
+              "name": "prototype-pollution",
+              "shortDescription": { "text": "Prototype pollution via object merge" },
+              "fullDescription": { "text": "Deep merging user-controlled objects without filtering __proto__ or constructor keys can lead to prototype pollution. An attacker can inject properties into Object.prototype, affecting all objects in the application." },
+              "helpUri": "https://semgrep.dev/r/javascript.lang.security.audit.prototype-pollution",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-1321", "security"] }
+            },
+            {
+              "id": "javascript.express.security.jwt-none-algorithm",
+              "name": "jwt-none-algorithm",
+              "shortDescription": { "text": "JWT verification allows 'none' algorithm" },
+              "fullDescription": { "text": "JWT token verification does not reject the 'none' algorithm. An attacker can forge valid tokens by setting the algorithm to 'none' and removing the signature. Explicitly specify allowed algorithms." },
+              "helpUri": "https://semgrep.dev/r/javascript.express.security.jwt-none-algorithm",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-347", "OWASP-A02:2021", "security", "jwt"] }
+            },
+            {
+              "id": "javascript.lang.security.audit.insecure-random",
+              "name": "insecure-random",
+              "shortDescription": { "text": "Math.random() used for security purpose" },
+              "fullDescription": { "text": "Math.random() is not cryptographically secure. When used for generating tokens, session IDs, or other security-sensitive values, use crypto.randomBytes() or crypto.randomUUID() instead." },
+              "helpUri": "https://semgrep.dev/r/javascript.lang.security.audit.insecure-random",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-330", "security", "crypto"] }
+            },
+            {
+              "id": "javascript.express.security.ssrf-fetch",
+              "name": "ssrf-fetch",
+              "shortDescription": { "text": "Server-Side Request Forgery via fetch()" },
+              "fullDescription": { "text": "A user-controlled URL is passed to fetch() without validation. An attacker could use this to make requests to internal services, cloud metadata endpoints, or other restricted resources. Validate and restrict allowed URLs." },
+              "helpUri": "https://semgrep.dev/r/javascript.express.security.ssrf-fetch",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-918", "OWASP-A10:2021", "security", "ssrf"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "javascript.express.security.audit.xss.mustache-escape",
+          "level": "error",
+          "message": { "text": "Triple-brace Mustache template {{{ userBio }}} renders unescaped HTML from user input. This leads to stored XSS." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "views/profile.hbs" }, "region": { "startLine": 24, "endLine": 24, "startColumn": 8, "endColumn": 29, "snippet": { "text": "{{{ userBio }}}" } } } }],
+          "fingerprints": { "matchBasedId/v1": "aa11bb22cc33dd44ee55ff66aa11bb22" }
+        },
+        {
+          "ruleId": "javascript.express.security.audit.path-traversal",
+          "level": "error",
+          "message": { "text": "req.params.filename is used directly in fs.readFile(). Attacker can traverse directories with ../ to read sensitive files." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "routes/files.js" }, "region": { "startLine": 18, "endLine": 18, "startColumn": 3, "endColumn": 55, "snippet": { "text": "fs.readFile('/uploads/' + req.params.filename, cb)" } } } }],
+          "codeFlows": [{ "threadFlows": [{ "locations": [
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "routes/files.js" }, "region": { "startLine": 15, "snippet": { "text": "const filename = req.params.filename;" } } }, "message": { "text": "User input from URL parameter 'filename'" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "routes/files.js" }, "region": { "startLine": 18, "snippet": { "text": "fs.readFile('/uploads/' + filename, cb)" } } }, "message": { "text": "Unsanitized path concatenation passed to fs.readFile()" } } }
+          ] }] }],
+          "fingerprints": { "matchBasedId/v1": "bb22cc33dd44ee55ff66aa11bb22cc33" }
+        },
+        {
+          "ruleId": "javascript.express.security.ssrf-fetch",
+          "level": "error",
+          "message": { "text": "User-controlled URL from req.body.url passed directly to fetch(). Attacker can target internal services or cloud metadata endpoints." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "routes/proxy.js" }, "region": { "startLine": 12, "endLine": 12, "startColumn": 18, "endColumn": 45, "snippet": { "text": "const resp = await fetch(req.body.url)" } } } }],
+          "codeFlows": [{ "threadFlows": [{ "locations": [
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "routes/proxy.js" }, "region": { "startLine": 9, "snippet": { "text": "const targetUrl = req.body.url;" } } }, "message": { "text": "User-supplied URL from request body" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "routes/proxy.js" }, "region": { "startLine": 12, "snippet": { "text": "const resp = await fetch(targetUrl)" } } }, "message": { "text": "Unvalidated URL passed to fetch() - SSRF sink" } } }
+          ] }] }],
+          "fingerprints": { "matchBasedId/v1": "cc33dd44ee55ff66aa11bb22cc33dd44" }
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.prototype-pollution",
+          "level": "error",
+          "message": { "text": "Deep merge of user-controlled object without filtering dangerous keys. Attacker can inject __proto__ to pollute Object.prototype." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "lib/utils.js" }, "region": { "startLine": 45, "endLine": 45, "startColumn": 3, "endColumn": 38, "snippet": { "text": "deepMerge(config, req.body.settings)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "dd44ee55ff66aa11bb22cc33dd44ee55" }
+        },
+        {
+          "ruleId": "javascript.express.security.jwt-none-algorithm",
+          "level": "error",
+          "message": { "text": "jwt.verify() called without specifying algorithms option. The 'none' algorithm will be accepted, allowing token forgery." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "middleware/auth.js" }, "region": { "startLine": 22, "endLine": 22, "startColumn": 17, "endColumn": 52, "snippet": { "text": "jwt.verify(token, process.env.SECRET)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "ee55ff66aa11bb22cc33dd44ee55ff66" }
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.unsafe-regex",
+          "level": "warning",
+          "message": { "text": "Regex with nested quantifiers can cause catastrophic backtracking on malicious input (ReDoS)." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "lib/validators.js" }, "region": { "startLine": 7, "endLine": 7, "startColumn": 18, "endColumn": 48, "snippet": { "text": "const emailRe = /^([a-z]+.)+[a-z]{2,}$/;" } } } }],
+          "fingerprints": { "matchBasedId/v1": "ff66aa11bb22cc33dd44ee55ff66aa11" }
+        },
+        {
+          "ruleId": "javascript.express.security.cors-misconfiguration",
+          "level": "warning",
+          "message": { "text": "CORS configured with origin: true and credentials: true. Any website can make authenticated cross-origin requests." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "app.js" }, "region": { "startLine": 14, "endLine": 14, "startColumn": 1, "endColumn": 55, "snippet": { "text": "app.use(cors({ origin: true, credentials: true }))" } } } }],
+          "fingerprints": { "matchBasedId/v1": "1122334455667788990011223344556677" }
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.insecure-random",
+          "level": "warning",
+          "message": { "text": "Math.random() used to generate session token. This is predictable and not suitable for security-sensitive values." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "lib/session.js" }, "region": { "startLine": 11, "endLine": 11, "startColumn": 16, "endColumn": 58, "snippet": { "text": "const token = Math.random().toString(36).slice(2)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "2233445566778899001122334455667788" }
+        },
+        {
+          "ruleId": "javascript.express.security.audit.xss.mustache-escape",
+          "level": "error",
+          "message": { "text": "Triple-brace rendering of user comment content. Stored XSS via comment body." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "views/comments.hbs" }, "region": { "startLine": 42, "endLine": 42, "startColumn": 12, "endColumn": 35, "snippet": { "text": "{{{ comment.body }}}" } } } }],
+          "fingerprints": { "matchBasedId/v1": "3344556677889900112233445566778899" }
+        },
+        {
+          "ruleId": "javascript.lang.security.audit.insecure-random",
+          "level": "warning",
+          "message": { "text": "Math.random() used in password reset token generation. Tokens can be predicted by an attacker." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "routes/auth.js" }, "region": { "startLine": 67, "endLine": 67, "startColumn": 20, "endColumn": 62, "snippet": { "text": "const resetToken = Math.random().toString(36)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "4455667788990011223344556677889900" }
+        },
+        {
+          "ruleId": "javascript.express.security.audit.path-traversal",
+          "level": "error",
+          "message": { "text": "User-controlled req.query.template used to construct file path for template loading." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "routes/render.js" }, "region": { "startLine": 9, "endLine": 9, "startColumn": 3, "endColumn": 60, "snippet": { "text": "res.render('templates/' + req.query.template)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "5566778899001122334455667788990011" }
+        },
+        {
+          "ruleId": "javascript.express.security.cors-misconfiguration",
+          "level": "warning",
+          "message": { "text": "Access-Control-Allow-Origin header set to wildcard '*' with Access-Control-Allow-Credentials: true." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "middleware/headers.js" }, "region": { "startLine": 5, "endLine": 5, "startColumn": 3, "endColumn": 58, "snippet": { "text": "res.setHeader('Access-Control-Allow-Origin', '*')" } } } }],
+          "fingerprints": { "matchBasedId/v1": "6677889900112233445566778899001122" }
+        }
+      ]
+    }
+  ]
+}

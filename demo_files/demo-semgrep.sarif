@@ -1,0 +1,164 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep",
+          "semanticVersion": "1.67.0",
+          "rules": [
+            {
+              "id": "python.lang.security.audit.dangerous-subprocess-use",
+              "name": "dangerous-subprocess-use",
+              "shortDescription": { "text": "Subprocess call with shell=True" },
+              "fullDescription": { "text": "Found a subprocess call using shell=True. This is dangerous because it can lead to command injection if user input is passed to the command string. Use a list of arguments instead." },
+              "helpUri": "https://semgrep.dev/r/python.lang.security.audit.dangerous-subprocess-use",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-78", "OWASP-A03:2021", "security", "audit"] }
+            },
+            {
+              "id": "python.flask.security.xss.direct-use-of-jinja2",
+              "name": "direct-use-of-jinja2",
+              "shortDescription": { "text": "Direct use of Jinja2 without autoescaping" },
+              "fullDescription": { "text": "Jinja2 template rendered without autoescape enabled. This may lead to Cross-Site Scripting (XSS) if user input is included in the template. Enable autoescape or use markupsafe." },
+              "helpUri": "https://semgrep.dev/r/python.flask.security.xss.direct-use-of-jinja2",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-79", "OWASP-A03:2021", "security", "xss"] }
+            },
+            {
+              "id": "python.lang.security.audit.hardcoded-password",
+              "name": "hardcoded-password",
+              "shortDescription": { "text": "Hardcoded password in source code" },
+              "fullDescription": { "text": "A hardcoded password was found in the source code. This is a security risk as credentials may be exposed in version control. Use environment variables or a secrets manager instead." },
+              "helpUri": "https://semgrep.dev/r/python.lang.security.audit.hardcoded-password",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-798", "OWASP-A07:2021", "security"] }
+            },
+            {
+              "id": "python.django.security.injection.sql-injection",
+              "name": "sql-injection",
+              "shortDescription": { "text": "SQL injection via string formatting" },
+              "fullDescription": { "text": "String formatting used to build a SQL query. This is vulnerable to SQL injection. Use parameterized queries or an ORM to prevent this issue." },
+              "helpUri": "https://semgrep.dev/r/python.django.security.injection.sql-injection",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-89", "OWASP-A03:2021", "security", "sql"] }
+            },
+            {
+              "id": "python.lang.security.audit.insecure-hash-md5",
+              "name": "insecure-hash-md5",
+              "shortDescription": { "text": "Use of insecure MD5 hash function" },
+              "fullDescription": { "text": "MD5 is a cryptographically broken hash function. It should not be used for security purposes such as password hashing or integrity verification. Use SHA-256 or bcrypt instead." },
+              "helpUri": "https://semgrep.dev/r/python.lang.security.audit.insecure-hash-md5",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-328", "security", "crypto"] }
+            },
+            {
+              "id": "python.flask.security.open-redirect",
+              "name": "open-redirect",
+              "shortDescription": { "text": "Open redirect vulnerability" },
+              "fullDescription": { "text": "User-controlled input is used in a redirect without validation. An attacker could craft a URL that redirects users to a malicious site. Validate the redirect target against an allowlist." },
+              "helpUri": "https://semgrep.dev/r/python.flask.security.open-redirect",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-601", "OWASP-A01:2021", "security"] }
+            },
+            {
+              "id": "python.lang.security.deserialization.avoid-pickle",
+              "name": "avoid-pickle",
+              "shortDescription": { "text": "Deserialization with pickle is unsafe" },
+              "fullDescription": { "text": "Pickle deserialization of untrusted data can lead to arbitrary code running. Use JSON or another safe serialization format for untrusted input." },
+              "helpUri": "https://semgrep.dev/r/python.lang.security.deserialization.avoid-pickle",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["CWE-502", "OWASP-A08:2021", "security", "deserialization"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "python.lang.security.audit.dangerous-subprocess-use",
+          "level": "error",
+          "message": { "text": "subprocess.call() is used with shell=True and user-controlled input from request.args.get('cmd'). This allows arbitrary command running." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/api/admin.py" }, "region": { "startLine": 47, "endLine": 47, "startColumn": 5, "endColumn": 62, "snippet": { "text": "subprocess.call(f'echo {user_input}', shell=True)" } } } }],
+          "codeFlows": [{ "threadFlows": [{ "locations": [
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/api/admin.py" }, "region": { "startLine": 42, "snippet": { "text": "user_input = request.args.get('cmd')" } } }, "message": { "text": "User input received from query parameter 'cmd'" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/api/admin.py" }, "region": { "startLine": 45, "snippet": { "text": "cmd_str = f'echo {user_input}'" } } }, "message": { "text": "Tainted data flows into f-string building shell command" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/api/admin.py" }, "region": { "startLine": 47, "snippet": { "text": "subprocess.call(cmd_str, shell=True)" } } }, "message": { "text": "Command injection: unsanitized input passed to subprocess with shell=True" } } }
+          ] }] }],
+          "fingerprints": { "matchBasedId/v1": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" }
+        },
+        {
+          "ruleId": "python.django.security.injection.sql-injection",
+          "level": "error",
+          "message": { "text": "SQL query built using f-string with user input from request.GET['username']. Use parameterized queries instead." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/users/queries.py" }, "region": { "startLine": 31, "endLine": 31, "startColumn": 5, "endColumn": 78, "snippet": { "text": "cursor.run(f\"SELECT * FROM users WHERE name = '{username}'\")" } } } }],
+          "codeFlows": [{ "threadFlows": [{ "locations": [
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/users/queries.py" }, "region": { "startLine": 27, "snippet": { "text": "username = request.GET['username']" } } }, "message": { "text": "User input from GET parameter" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/users/queries.py" }, "region": { "startLine": 31, "snippet": { "text": "cursor.run(f\"SELECT * FROM users WHERE name = '{username}'\")" } } }, "message": { "text": "Tainted string interpolated into raw SQL query" } } }
+          ] }] }],
+          "fingerprints": { "matchBasedId/v1": "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6" }
+        },
+        {
+          "ruleId": "python.django.security.injection.sql-injection",
+          "level": "error",
+          "message": { "text": "Raw SQL query built with string concatenation using search_term from user input." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/products/search.py" }, "region": { "startLine": 44, "endLine": 44, "startColumn": 5, "endColumn": 85, "snippet": { "text": "cursor.run(\"SELECT * FROM products WHERE description LIKE '%\" + term + \"%'\")" } } } }],
+          "fingerprints": { "matchBasedId/v1": "d5e6f7a2b3c4d5e6f7a2b3c4d5e6f7a2" }
+        },
+        {
+          "ruleId": "python.lang.security.deserialization.avoid-pickle",
+          "level": "error",
+          "message": { "text": "pickle.loads() called on data received from external cache. Deserializing untrusted data with pickle is dangerous." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/cache/loader.py" }, "region": { "startLine": 34, "endLine": 34, "startColumn": 12, "endColumn": 43, "snippet": { "text": "data = pickle.loads(raw_bytes)" } } } }],
+          "codeFlows": [{ "threadFlows": [{ "locations": [
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/cache/loader.py" }, "region": { "startLine": 28, "snippet": { "text": "raw_bytes = redis_conn.get(cache_key)" } } }, "message": { "text": "Data read from external Redis cache" } } },
+            { "location": { "physicalLocation": { "artifactLocation": { "uri": "src/cache/loader.py" }, "region": { "startLine": 34, "snippet": { "text": "data = pickle.loads(raw_bytes)" } } }, "message": { "text": "Untrusted bytes deserialized with pickle" } } }
+          ] }] }],
+          "fingerprints": { "matchBasedId/v1": "c4d5e6f7a2b3c4d5e6f7a2b3c4d5e6f7" }
+        },
+        {
+          "ruleId": "python.flask.security.xss.direct-use-of-jinja2",
+          "level": "warning",
+          "message": { "text": "Jinja2 Environment created without autoescape. Rendering user input in templates may lead to XSS." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/templates/engine.py" }, "region": { "startLine": 12, "endLine": 12, "startColumn": 1, "endColumn": 48, "snippet": { "text": "env = Environment(loader=FileSystemLoader('.'))" } } } }],
+          "fingerprints": { "matchBasedId/v1": "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1" }
+        },
+        {
+          "ruleId": "python.flask.security.xss.direct-use-of-jinja2",
+          "level": "warning",
+          "message": { "text": "Template rendering with markup=False in admin panel. User-generated content displayed without escaping." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/admin/dashboard.py" }, "region": { "startLine": 88, "endLine": 88, "startColumn": 5, "endColumn": 52, "snippet": { "text": "return render_template_string(user_bio)" } } } }],
+          "fingerprints": { "matchBasedId/v1": "e6f7a2b3c4d5e6f7a2b3c4d5e6f7a2b3" }
+        },
+        {
+          "ruleId": "python.lang.security.audit.hardcoded-password",
+          "level": "warning",
+          "message": { "text": "Hardcoded password found assigned to variable db_password." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/config/settings.py" }, "region": { "startLine": 8, "endLine": 8, "startColumn": 1, "endColumn": 38, "snippet": { "text": "db_password = 'SuperSecret123!'" } } } }],
+          "fingerprints": { "matchBasedId/v1": "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" }
+        },
+        {
+          "ruleId": "python.lang.security.audit.hardcoded-password",
+          "level": "warning",
+          "message": { "text": "Hardcoded API key found assigned to variable api_secret." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/config/settings.py" }, "region": { "startLine": 14, "endLine": 14, "startColumn": 1, "endColumn": 52, "snippet": { "text": "api_secret = 'sk-demo-1234567890abcdefghij'" } } } }],
+          "fingerprints": { "matchBasedId/v1": "f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3" }
+        },
+        {
+          "ruleId": "python.lang.security.audit.insecure-hash-md5",
+          "level": "warning",
+          "message": { "text": "MD5 is used to hash user passwords. MD5 is cryptographically broken. Use bcrypt or argon2 instead." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/auth/utils.py" }, "region": { "startLine": 19, "endLine": 19, "startColumn": 12, "endColumn": 55, "snippet": { "text": "return hashlib.md5(password.encode()).hexdigest()" } } } }],
+          "fingerprints": { "matchBasedId/v1": "a2b3c4d5e6f7a2b3c4d5e6f7a2b3c4d5" }
+        },
+        {
+          "ruleId": "python.flask.security.open-redirect",
+          "level": "warning",
+          "message": { "text": "User-controlled value from request.args['next'] is used in redirect() without validation, leading to an open redirect." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/auth/views.py" }, "region": { "startLine": 56, "endLine": 56, "startColumn": 12, "endColumn": 51, "snippet": { "text": "return redirect(request.args['next'])" } } } }],
+          "fingerprints": { "matchBasedId/v1": "b3c4d5e6f7a2b3c4d5e6f7a2b3c4d5e6" }
+        }
+      ]
+    }
+  ]
+}
