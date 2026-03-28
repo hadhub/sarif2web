@@ -1,16 +1,20 @@
 # Sarif2Web
 
-A web-based application for managing and reviewing security findings from [SARIF](https://sarifweb.azurewebsites.net/) (Static Analysis Results Interchange Format) and JSON files. **Centralized interface for analyzing, filtering, tracking, and exporting security analysis results.**
+> Built with [Claude Code](https://claude.ai/code)
+
+Web app to manage and review security findings from [SARIF](https://sarifweb.azurewebsites.net/) and JSON files. Upload scan results, triage, filter, visualize code flows and export.
+
+**This is a local tool, not a production service.** It's meant to run on your machine via Docker Compose during an audit or triage session. There is no authentication, no user management, no HTTPS.
 
 ## Supported Tools
 
-| Tool               | Status   | Command                                                                       |
-| ------------------ | -------- | ----------------------------------------------------------------------------- |
-| Semgrep / Opengrep | Tested   | `semgrep scan --sarif --sarif-output=scan.sarif`                              |
-| CodeQL             | Tested   | `codeql database analyze codeql-db --format=sarif-latest --output=scan.sarif` |
-| Snyk               | Tested   | `snyk test --sarif-file-output=scan.sarif`                                    |
-| Gitleaks           | Tested   | `gitleaks detect --source=. --report-format=sarif --report-path=scan.sarif`   |
-| TruffleHog         | Tested   | `trufflehog git https://github.com/repo.git --json > results.jsonl`           |
+| Tool               | Status | Command                                                                       |
+|------------------  |--------|-------------------------------------------------------------------------------|
+| Semgrep / Opengrep | Tested | `semgrep scan --sarif --sarif-output=scan.sarif`                              |
+| CodeQL             | Tested | `codeql database analyze codeql-db --format=sarif-latest --output=scan.sarif` |
+| Snyk               | Tested | `snyk test --sarif-file-output=scan.sarif`                                    |
+| Gitleaks           | Tested | `gitleaks detect --source=. --report-format=sarif --report-path=scan.sarif`   |
+| TruffleHog         | Tested | `trufflehog git https://github.com/repo.git --json > results.jsonl`           |
 
 Any tool that outputs valid SARIF should work.
 
@@ -19,7 +23,7 @@ Any tool that outputs valid SARIF should work.
 Dashboard
 ![Dashboard dark](screenshots/s1.png)
 
-Filters & triage 
+Filters & triage
 ![Filters](screenshots/s4.png)
 
 Graph view
@@ -30,32 +34,33 @@ Drag & drop upload
 
 ## Features
 
-- **Drag & drop upload** -- drop `.sarif` or `.json` files anywhere on the page; auto-creates a project if none is selected
-- **Multi-format support** -- SARIF, gitleaks JSON, TruffleHog JSONL
-- **Multi-file projects** -- merge multiple scan files into one project with automatic deduplication
-- **Integrated scanning** -- launch scans directly from the UI by providing a Git repository URL (see [Integrated Scanners](#integrated-scanners))
-- **Settings & tokens** -- configure API tokens (Semgrep, Snyk, GitHub) via the Settings modal (gear icon); tokens are stored in MongoDB and persist across restarts
-- **Filter bar** -- one-click filtering by severity, status, and tool directly from the stats bar or table cells
-- **Search** -- full-text search across rule IDs, file paths, messages, and code snippets
-- **Status tracking** -- triage findings as New, Confirmed, False Positive, Mitigated, or Accepted Risk
-- **Bulk operations** -- select multiple findings to update status or delete in bulk
-- **Soft delete + undo** -- deleted findings can be restored via the undo toast within 6 seconds
-- **Notes** -- annotate individual findings for documentation
-- **SVG code flow graphs** -- visualize source-to-sink data flows and finding locations
-- **SARIF export** -- re-export findings with embedded review metadata (status + notes)
-- **Dark / Light theme** -- Dracula dark and clean light themes, persisted in local storage
+- **Drag & drop upload** : drop `.sarif` or `.json` files anywhere on the page, auto-creates a project if none is selected
+- **Multi-format** : SARIF, gitleaks JSON, TruffleHog JSONL
+- **Multi-file projects** : merge multiple scans into one project with automatic dedup
+- **Integrated scanning** : launch scans from the UI with a Git repo URL (see [Integrated Scanners](#integrated-scanners))
+- **Settings & tokens** : configure API tokens (Semgrep, Snyk, GitHub) via the gear icon, stored in MongoDB
+- **Filter bar** : filter by severity, status, tool from the stats bar or table cells
+- **Search** : full-text across rule IDs, file paths, messages, snippets
+- **Status tracking** : triage as New, Confirmed, False Positive, Mitigated, Accepted Risk
+- **Bulk operations** : select multiple findings to update status or delete
+- **Soft delete + undo** : deleted findings can be restored via the undo toast (6s)
+- **Notes** : annotate findings
+- **SVG code flow graphs** : visualize source-to-sink data flows
+- **SARIF export** : re-export with review metadata (status + notes)
+- **Dark / Light theme** : Dracula dark and clean light, persisted in local storage
 
 ## Quick Start
 
 ```bash
-docker-compose up --build
+docker compose build --no-cache
+docker compose up
 ```
 
 App available at **http://localhost:9090**
 
 ```bash
-docker-compose down        # stop services
-docker-compose down -v     # stop + wipe database
+docker compose down        # stop services
+docker compose down -v     # stop + wipe database
 ```
 
 ## Architecture
@@ -64,83 +69,95 @@ docker-compose down -v     # stop + wipe database
 Browser --> Nginx (:9090) --> Flask/Gunicorn (:5000) --> MongoDB (:27017)
 ```
 
-| Service       | Role                                            |
-| ------------- | ----------------------------------------------- |
-| **Nginx**     | Reverse proxy, 50 MB upload limit, 120s timeout |
-| **Flask**     | Python 3.12 app server, 2 Gunicorn workers      |
-| **MongoDB 7** | Document store, persistent Docker volume        |
+| Service   | Role                                            |
+|-----------|-------------------------------------------------|
+| Nginx     | Reverse proxy, 50 MB upload limit, 120s timeout |
+| Flask     | Python 3.12 app server, 2 Gunicorn workers      |
+| MongoDB 7 | Document store, persistent Docker volume        |
 
 ## Project Structure
 
 ```
 sarif2web/
 ├── app/
-│   ├── app.py              # Flask backend (routes, parsers, SVG renderer)
-│   ├── requirements.txt    # Python dependencies
+│   ├── app.py              # Flask entry point, registers blueprints
+│   ├── db.py               # MongoDB connection, collections, indexes
+│   ├── parsers.py          # Format detection + SARIF/TruffleHog/gitleaks parsers
+│   ├── helpers.py          # Serialization, dedup hash, finding insertion
+│   ├── scanner.py          # Scanner definitions, background scan execution
+│   ├── svg.py              # SVG code flow renderer
+│   ├── routes/
+│   │   ├── __init__.py     # Blueprint registration
+│   │   ├── projects.py     # Project CRUD
+│   │   ├── findings.py     # Findings CRUD, bulk ops, SVG endpoint
+│   │   ├── scans.py        # Scan creation, listing, deletion
+│   │   ├── settings.py     # Token settings
+│   │   └── upload.py       # File upload + SARIF export
+│   ├── requirements.txt
 │   └── templates/
 │       └── index.html      # Frontend SPA (vanilla JS, no build step)
 ├── nginx/
-│   └── nginx.conf          # Reverse proxy config
-├── Dockerfile              # App container
-└── docker-compose.yml      # Service orchestration
+│   └── nginx.conf
+├── Dockerfile
+└── docker-compose.yml
 ```
 
 ## Integrated Scanners
 
-The app can clone a Git repository and run scanners directly from the UI. Click the **Scan** button, provide a repo URL, and select a scanner.
+The app can clone a Git repo and run scanners directly from the UI. Click **Scan**, provide a repo URL, pick a scanner.
 
-| Scanner    | Token required | Behavior                                                                                      |
-| ---------- | -------------- | --------------------------------------------------------------------------------------------- |
-| Semgrep    | Optional       | Without token: `semgrep scan` with default rules. With token: `semgrep ci` with Cloud rules.  |
-| Snyk       | **Required**   | Requires a Snyk API token. Scans are blocked if no token is configured.                       |
-| CodeQL     | No             | Detects language automatically, creates a CodeQL database, and runs analysis.                  |
-| TruffleHog | No             | Scans the filesystem for leaked secrets.                                                      |
-| Gitleaks   | No             | Fast regex + entropy-based secret detection.                                                  |
+| Scanner    | Token required | Behavior                                                                                     |
+|------------|----------------|----------------------------------------------------------------------------------------------|
+| Semgrep    | Optional       | Without token: `semgrep scan` with default rules. With token: `semgrep ci` with Cloud rules. |
+| Snyk       | **Required**   | Needs a Snyk API token. Scans are blocked if no token is configured.                         |
+| CodeQL     | No             | Auto-detects language, creates a CodeQL database, runs analysis.                             |
+| TruffleHog | No             | Scans the filesystem for leaked secrets.                                                     |
+| Gitleaks   | No             | Fast regex + entropy-based secret detection.                                                 |
 
 ### Settings & API Tokens
 
-Click the **gear icon** (&#9881;) in the toolbar to open the Settings modal. Tokens are stored in MongoDB and persist across container restarts.
+Click the gear icon in the toolbar to open Settings. Tokens are stored in MongoDB and persist across restarts.
 
-| Token           | Purpose                                                                 |
-| --------------- | ----------------------------------------------------------------------- |
-| Semgrep Token   | Enables `semgrep ci` with Semgrep Cloud Platform rules and policies     |
-| Snyk Token      | Required to authenticate Snyk CLI (`snyk code test`)                    |
-| GitHub Token    | Allows cloning private repositories via HTTPS                           |
+| Token         | Purpose                                                             |
+|---------------|---------------------------------------------------------------------|
+| Semgrep Token | Enables `semgrep ci` with Semgrep Cloud Platform rules and policies |
+| Snyk Token    | Required for Snyk CLI auth (`snyk code test`)                       |
+| GitHub Token  | Allows cloning private repos via HTTPS                              |
 
 - Tokens are displayed masked (e.g. `••••abcd`) when set
 - Use the **X** button next to a token field to remove it
-- If a scan requires a missing token, an error message directs the user to the Settings modal
+- If a scan requires a missing token, you get an error pointing to Settings
 
 ## Configuration
 
 | Variable    | Default                               | Description               |
-| ----------- | ------------------------------------- | ------------------------- |
+|-------------|---------------------------------------|---------------------------|
 | `MONGO_URI` | `mongodb://mongo:27017/sarif_manager` | MongoDB connection string |
 
 ## API Reference
 
-| Method   | Endpoint                    | Description                                                  |
-| -------- | --------------------------- | ------------------------------------------------------------ |
-| `POST`   | `/api/projects`             | Create a project                                             |
-| `GET`    | `/api/projects`             | List projects                                                |
-| `DELETE` | `/api/projects/<id>`        | Delete a project + findings                                  |
-| `POST`   | `/api/projects/bulk-delete` | Bulk delete projects                                         |
-| `POST`   | `/api/upload`               | Upload file (multipart: `file` + `project_id`)               |
+| Method   | Endpoint                    | Description                                        |
+|----------|-----------------------------|----------------------------------------------------|
+| `POST`   | `/api/projects`             | Create a project                                   |
+| `GET`    | `/api/projects`             | List projects                                      |
+| `DELETE` | `/api/projects/<id>`        | Delete a project + findings                        |
+| `POST`   | `/api/projects/bulk-delete` | Bulk delete projects                               |
+| `POST`   | `/api/upload`               | Upload file (multipart: `file` + `project_id`)     |
 | `GET`    | `/api/findings`             | List findings (`project_id`, `status`, `level`, `tool`, `q`) |
-| `GET`    | `/api/findings/counts`      | Unfiltered counts by level, status, tool                     |
-| `PATCH`  | `/api/findings/<id>`        | Update status or notes                                       |
-| `PATCH`  | `/api/findings/bulk`        | Bulk update statuses                                         |
-| `POST`   | `/api/findings/bulk-delete` | Soft-delete findings                                         |
-| `POST`   | `/api/findings/restore`     | Restore soft-deleted findings                                |
-| `GET`    | `/api/findings/<id>/svg`    | SVG code flow visualization                                  |
-| `GET`    | `/api/export/<project_id>`  | Export as SARIF                                              |
-| `GET`    | `/api/scanners`             | List available scanners                                      |
-| `POST`   | `/api/scans`                | Launch a scan (repo URL + scanner)                           |
-| `GET`    | `/api/scans`                | List scans for a project                                     |
-| `GET`    | `/api/scans/<id>`           | Get scan status and details                                  |
-| `DELETE` | `/api/scans/<id>`           | Delete a scan record                                         |
-| `GET`    | `/api/settings`             | Get settings (tokens masked)                                 |
-| `PUT`    | `/api/settings`             | Update settings (tokens)                                     |
+| `GET`    | `/api/findings/counts`      | Counts by level, status, tool                      |
+| `PATCH`  | `/api/findings/<id>`        | Update status or notes                             |
+| `PATCH`  | `/api/findings/bulk`        | Bulk update statuses                               |
+| `POST`   | `/api/findings/bulk-delete` | Soft-delete findings                               |
+| `POST`   | `/api/findings/restore`     | Restore soft-deleted findings                      |
+| `GET`    | `/api/findings/<id>/svg`    | SVG code flow visualization                        |
+| `GET`    | `/api/export/<project_id>`  | Export as SARIF                                    |
+| `GET`    | `/api/scanners`             | List available scanners                            |
+| `POST`   | `/api/scans`                | Launch a scan (repo URL + scanner)                 |
+| `GET`    | `/api/scans`                | List scans for a project                           |
+| `GET`    | `/api/scans/<id>`           | Get scan status and details                        |
+| `DELETE` | `/api/scans/<id>`           | Delete a scan record                               |
+| `GET`    | `/api/settings`             | Get settings (tokens masked)                       |
+| `PUT`    | `/api/settings`             | Update settings (tokens)                           |
 
 ### Examples
 
