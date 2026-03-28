@@ -1,15 +1,28 @@
-import base64
 import os
 
 from cryptography.fernet import Fernet, InvalidToken
+from pymongo import MongoClient
 
+# Key must be stable across all Gunicorn workers and container restarts.
+# Priority: ENCRYPTION_KEY env var > key stored in MongoDB.
+
+_mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/sarif_manager")
 _key = os.environ.get("ENCRYPTION_KEY")
-if _key:
-    # Accept raw 32-byte base64url key or a Fernet key directly
-    _fernet = Fernet(_key.encode() if isinstance(_key, str) else _key)
-else:
-    # Auto-generate a key and warn — fine for dev, not for prod
-    _fernet = Fernet(Fernet.generate_key())
+
+if not _key:
+    _client = MongoClient(_mongo_uri)
+    _db = _client.get_default_database()
+    _meta = _db["_meta"]
+
+    doc = _meta.find_one({"_id": "encryption_key"})
+    if doc:
+        _key = doc["value"]
+    else:
+        _key = Fernet.generate_key().decode()
+        _meta.insert_one({"_id": "encryption_key", "value": _key})
+    _client.close()
+
+_fernet = Fernet(_key.encode() if isinstance(_key, str) else _key)
 
 
 def encrypt(value):

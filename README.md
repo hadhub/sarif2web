@@ -34,11 +34,11 @@ Drag & drop upload
 
 ## Features
 
-- **Drag & drop upload** : drop `.sarif` or `.json` files anywhere on the page, auto-creates a project if none is selected
+- **Drag & drop upload** : drop `.sarif`, `.json` or `.jsonl` files anywhere on the page, auto-creates a project if none is selected
 - **Multi-format** : SARIF, gitleaks JSON, TruffleHog JSONL
 - **Multi-file projects** : merge multiple scans into one project with automatic dedup
 - **Integrated scanning** : launch scans from the UI with a Git repo URL (see [Integrated Scanners](#integrated-scanners))
-- **Settings & tokens** : configure API tokens (Semgrep, Snyk, GitHub) via the gear icon, stored in MongoDB
+- **Settings & tokens** : configure API tokens (Semgrep, Snyk, GitHub) via the gear icon, encrypted and stored in MongoDB
 - **Filter bar** : filter by severity, status, tool from the stats bar or table cells
 - **Search** : full-text across rule IDs, file paths, messages, snippets
 - **Status tracking** : triage as New, Confirmed, False Positive, Mitigated, Accepted Risk
@@ -80,8 +80,9 @@ Browser --> Nginx (:9090) --> Flask/Gunicorn (:5000) --> MongoDB (:27017)
 ```
 sarif2web/
 ├── app/
-│   ├── app.py              # Flask entry point, registers blueprints
+│   ├── app.py              # Flask entry point, registers blueprints, security headers
 │   ├── db.py               # MongoDB connection, collections, indexes
+│   ├── crypto.py           # Token encryption (Fernet, key stored in MongoDB)
 │   ├── parsers.py          # Format detection + SARIF/TruffleHog/gitleaks parsers
 │   ├── helpers.py          # Serialization, dedup hash, finding insertion
 │   ├── scanner.py          # Scanner definitions, background scan execution
@@ -116,7 +117,7 @@ The app can clone a Git repo and run scanners directly from the UI. Click **Scan
 
 ### Settings & API Tokens
 
-Click the gear icon in the toolbar to open Settings. Tokens are stored in MongoDB and persist across restarts.
+Click the gear icon in the toolbar to open Settings. Tokens are encrypted (Fernet) and stored in MongoDB. They persist across container restarts.
 
 | Token         | Purpose                                                             |
 |---------------|---------------------------------------------------------------------|
@@ -130,9 +131,11 @@ Click the gear icon in the toolbar to open Settings. Tokens are stored in MongoD
 
 ## Configuration
 
-| Variable    | Default                               | Description               |
-|-------------|---------------------------------------|---------------------------|
-| `MONGO_URI` | `mongodb://mongo:27017/sarif_manager` | MongoDB connection string |
+| Variable         | Default                               | Description                                                        |
+|------------------|---------------------------------------|--------------------------------------------------------------------|
+| `MONGO_URI`      | `mongodb://mongo:27017/sarif_manager` | MongoDB connection string                                          |
+| `ENCRYPTION_KEY` | auto-generated, stored in MongoDB     | Fernet key for token encryption. Set this to use your own key.     |
+| `FLASK_DEBUG`    | `0`                                   | Set to `1` to enable Flask debug mode (dev only).                  |
 
 ## API Reference
 
