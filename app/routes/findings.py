@@ -45,8 +45,25 @@ def list_findings():
             {"snippet": {"$regex": escaped, "$options": "i"}},
         ]
 
-    docs = list(findings_col.find(query).sort([("level", 1), ("rule_id", 1)]))
-    return jsonify([serialize(d) for d in docs])
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        per_page = min(500, max(1, int(request.args.get("per_page", 100))))
+    except (ValueError, TypeError):
+        per_page = 100
+
+    cursor = findings_col.find(query).sort([("level", 1), ("rule_id", 1)])
+    total = findings_col.count_documents(query)
+    docs = list(cursor.skip((page - 1) * per_page).limit(per_page))
+
+    return jsonify({
+        "findings": [serialize(d) for d in docs],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    })
 
 
 @bp.route("/api/findings/counts", methods=["GET"])

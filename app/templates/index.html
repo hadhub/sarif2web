@@ -188,12 +188,12 @@ a:visited{color:var(--link)}
 /* ── Scan modal ── */
 .scan-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--overlay-bg);z-index:150;display:none;align-items:center;justify-content:center}
 .scan-overlay.open{display:flex}
-.scan-modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;width:460px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.scan-modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;width:460px;max-width:92vw;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .scan-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
 .scan-modal-header h3{font-size:14px;color:var(--pink);font-weight:bold}
 .scan-modal-close{background:none;border:none;color:var(--fg2);font-size:22px;cursor:pointer;padding:2px 8px;border-radius:4px}
 .scan-modal-close:hover{color:var(--red);background:rgba(255,85,85,.15)}
-.scan-modal-body{padding:20px}
+.scan-modal-body{padding:20px;overflow-y:auto;flex:1;min-height:0}
 .scan-modal-body label{display:block;font-size:12px;color:var(--fg2);margin-bottom:4px;margin-top:12px}
 .scan-modal-body label:first-child{margin-top:0}
 .scan-modal-body input,.scan-modal-body select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:8px 10px;border-radius:4px;font-family:inherit;font-size:12px}
@@ -221,6 +221,38 @@ a:visited{color:var(--link)}
 .scan-count{color:var(--fg2)}
 .scan-delete{background:none;border:none;color:var(--fg2);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;flex-shrink:0}
 .scan-delete:hover{color:var(--red);background:rgba(255,85,85,.15)}
+
+/* ── Scanner checkboxes ── */
+.scanner-checkboxes{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.scanner-cb-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:4px;cursor:pointer;transition:.15s;font-size:12px}
+.scanner-cb-item:hover{background:var(--bg3)}
+.scanner-cb-item input[type="checkbox"]{accent-color:var(--purple);cursor:pointer;width:15px;height:15px;flex-shrink:0}
+.scanner-cb-name{font-weight:bold;color:var(--fg);white-space:nowrap}
+.scanner-cb-desc{color:var(--fg2);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scanner-cb-all{border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:2px}
+.scanner-cb-all span{font-weight:bold;color:var(--accent)}
+
+/* ── Custom rules ── */
+.settings-divider{height:1px;background:var(--border);margin:16px 0 8px}
+.rules-list{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.rule-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-size:12px}
+.rule-item .rule-name{flex:1;color:var(--fg);font-weight:bold}
+.rule-item .rule-date{color:var(--fg2);font-size:10px}
+.rule-item .rule-del{background:none;border:none;color:var(--fg2);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:3px}
+.rule-item .rule-del:hover{color:var(--red);background:rgba(255,85,85,.15)}
+.rule-empty{color:var(--fg2);font-size:11px;font-style:italic;padding:4px 0}
+.rule-import-label{display:block;padding:14px;background:var(--bg);border:1px dashed var(--border);border-radius:6px;text-align:center;cursor:pointer;font-size:12px;color:var(--fg2);transition:.2s;margin-top:4px}
+.rule-import-label:hover{border-color:var(--purple);color:var(--fg)}
+.rule-import-label.dragover{border-color:var(--purple);background:var(--bg3);color:var(--fg)}
+.rule-import-status{font-size:11px;color:var(--fg2);margin-top:6px;min-height:16px}
+
+/* ── Pagination ── */
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0}
+.pagination .page-info{font-size:12px;color:var(--fg2)}
+.pagination .page-btn{padding:4px 12px;border:1px solid var(--border);background:var(--bg3);color:var(--fg);border-radius:4px;cursor:pointer;font-family:inherit;font-size:12px;transition:.15s}
+.pagination .page-btn:hover:not(:disabled){border-color:var(--purple);color:var(--purple)}
+.pagination .page-btn:disabled{opacity:.3;cursor:default}
+.pagination select{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:4px;font-family:inherit;font-size:11px}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -279,6 +311,7 @@ a:visited{color:var(--link)}
       <div>Upload a SARIF file to get started</div>
     </div>
   </div>
+  <div id="pagination-bar"></div>
 </div>
 
 <div class="confirm-overlay" id="confirm-overlay">
@@ -314,9 +347,8 @@ a:visited{color:var(--link)}
       <input type="text" id="scan-repo-url" placeholder="https://github.com/user/repo.git">
       <label>Branch (optional)</label>
       <input type="text" id="scan-branch" placeholder="main">
-      <label>Scanner</label>
-      <select id="scan-tool"></select>
-      <div class="scan-desc" id="scan-desc">Select a scanner to see its description.</div>
+      <label>Scanners</label>
+      <div class="scanner-checkboxes" id="scanner-checkboxes"></div>
     </div>
     <div class="scan-modal-footer">
       <button class="btn" id="scan-cancel">Cancel</button>
@@ -347,6 +379,15 @@ a:visited{color:var(--link)}
         <input type="password" id="settings-github-token" placeholder="Not set" autocomplete="off">
         <button class="settings-token-clear" data-for="settings-github-token" title="Remove token" style="display:none">&times;</button>
       </div>
+      <div class="settings-divider"></div>
+      <label style="font-size:13px;color:var(--pink);font-weight:bold">Custom Semgrep Rules</label>
+      <div class="rules-list" id="semgrep-rules-list"></div>
+      <label>Import rules from YAML files</label>
+      <label class="rule-import-label" id="rule-import-label">
+        Click or drop .yml/.yaml files here
+        <input type="file" id="rule-file-input" accept=".yml,.yaml" multiple style="display:none">
+      </label>
+      <div class="rule-import-status" id="rule-import-status"></div>
     </div>
     <div class="scan-modal-footer">
       <button class="btn" id="settings-cancel">Cancel</button>
@@ -373,6 +414,9 @@ let findings = [];
 let selected = new Set();
 let activeFilters = { levels: new Set(), statuses: new Set(), tools: new Set() };
 let searchTimeout = null;
+let currentPage = 1;
+let totalFindings = 0;
+let perPage = 100;
 
 const STATUS_LABELS = {
   new: 'New', confirmed: 'Confirmed',
@@ -473,7 +517,7 @@ async function uploadFiles(files, projectId) {
     if (dupes > 0) msg += ' (' + dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped)';
     toast(msg);
     await loadProjects(projectId);
-    if (currentProject === projectId) await loadFindings();
+    if (currentProject === projectId) await loadFindings(true);
   }
 }
 
@@ -774,7 +818,7 @@ async function selectProject(id) {
   });
   document.getElementById('export-btn').disabled = false;
   document.getElementById('scan-btn').disabled = false;
-  await loadFindings();
+  await loadFindings(true);
   pollScans();
 }
 
@@ -787,9 +831,10 @@ async function loadCounts() {
   globalCounts = await r.json();
 }
 
-async function loadFindings() {
+async function loadFindings(resetPage) {
   if (!currentProject) return;
-  const params = new URLSearchParams({ project_id: currentProject });
+  if (resetPage) currentPage = 1;
+  const params = new URLSearchParams({ project_id: currentProject, page: currentPage, per_page: perPage });
 
   const q = document.getElementById('search').value.trim();
   if (q) params.set('q', q);
@@ -799,7 +844,9 @@ async function loadFindings() {
 
   await loadCounts();
   const r = await fetch(API + '/api/findings?' + params);
-  findings = await r.json();
+  const data = await r.json();
+  findings = data.findings;
+  totalFindings = data.total;
   selected.clear();
   renderStats();
   renderTable();
@@ -880,7 +927,7 @@ function renderStats() {
 
   const total = document.createElement('span');
   total.style.cssText = 'font-size:11px;color:var(--fg2)';
-  var filteredText = findings.length < globalCounts.total ? findings.length + ' / ' + globalCounts.total : '' + globalCounts.total;
+  var filteredText = totalFindings < globalCounts.total ? totalFindings + ' / ' + globalCounts.total : '' + globalCounts.total;
   total.textContent = 'Total: ' + filteredText;
   bar.appendChild(total);
 }
@@ -888,13 +935,16 @@ function renderStats() {
 function toggleFilter(type, val) {
   if (activeFilters[type].has(val)) activeFilters[type].delete(val);
   else activeFilters[type].add(val);
-  loadFindings();
+  loadFindings(true);
 }
 
 // -- Table --
 function renderTable() {
   const wrap = document.getElementById('table-wrap');
   wrap.textContent = '';
+  var pagBar = document.getElementById('pagination-bar');
+  pagBar.textContent = '';
+  pagBar.className = '';
 
   if (!currentProject) {
     const empty = document.createElement('div');
@@ -1057,7 +1107,49 @@ function renderTable() {
 
   table.appendChild(tbody);
   wrap.appendChild(table);
+  renderPagination();
   updateBulkBtn();
+}
+
+function renderPagination() {
+  var pag = document.getElementById('pagination-bar');
+  pag.textContent = '';
+  var totalPages = Math.ceil(totalFindings / perPage);
+  if (totalPages <= 1) return;
+  pag.className = 'pagination';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.textContent = '\u2190 Prev';
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.addEventListener('click', function() { currentPage--; loadFindings(); });
+    pag.appendChild(prevBtn);
+
+    var start = (currentPage - 1) * perPage + 1;
+    var end = Math.min(currentPage * perPage, totalFindings);
+    var info = document.createElement('span');
+    info.className = 'page-info';
+    info.textContent = start + '-' + end + ' of ' + totalFindings + '  (page ' + currentPage + '/' + totalPages + ')';
+    pag.appendChild(info);
+
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.textContent = 'Next \u2192';
+    nextBtn.disabled = currentPage >= totalPages;
+    nextBtn.addEventListener('click', function() { currentPage++; loadFindings(); });
+    pag.appendChild(nextBtn);
+
+    var ppSel = document.createElement('select');
+    ppSel.title = 'Results per page';
+    [50, 100, 200, 500].forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n + '/page';
+      if (n === perPage) opt.selected = true;
+      ppSel.appendChild(opt);
+    });
+    ppSel.addEventListener('change', function() { perPage = parseInt(this.value); loadFindings(true); });
+    pag.appendChild(ppSel);
 }
 
 // -- Selection --
@@ -1181,7 +1273,7 @@ async function restoreFindings(ids) {
 // -- Search --
 document.getElementById('search').addEventListener('input', function() {
   clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(loadFindings, 300);
+  searchTimeout = setTimeout(function() { loadFindings(true); }, 300);
 });
 
 // -- Export --
@@ -1273,34 +1365,50 @@ async function loadScanners() {
   try {
     var r = await fetch(API + '/api/scanners');
     scanners = await r.json();
-    var sel = document.getElementById('scan-tool');
-    sel.textContent = '';
-    // "All" option first (default)
-    var allOpt = document.createElement('option');
-    allOpt.value = 'all';
-    allOpt.textContent = 'All scanners';
-    sel.appendChild(allOpt);
-    scanners.forEach(function(s) {
-      var opt = document.createElement('option');
-      opt.value = s.name;
-      opt.textContent = s.name.charAt(0).toUpperCase() + s.name.slice(1);
-      sel.appendChild(opt);
+    var container = document.getElementById('scanner-checkboxes');
+    container.textContent = '';
+
+    var allDiv = document.createElement('label');
+    allDiv.className = 'scanner-cb-item scanner-cb-all';
+    var allCb = document.createElement('input');
+    allCb.type = 'checkbox';
+    allCb.id = 'scan-tool-all';
+    allCb.checked = true;
+    allCb.addEventListener('change', function() {
+      container.querySelectorAll('.scanner-cb').forEach(function(cb) { cb.checked = allCb.checked; });
     });
-    updateScanDesc();
+    var allLabel = document.createElement('span');
+    allLabel.textContent = 'Select all';
+    allDiv.appendChild(allCb);
+    allDiv.appendChild(allLabel);
+    container.appendChild(allDiv);
+
+    scanners.forEach(function(s) {
+      var div = document.createElement('label');
+      div.className = 'scanner-cb-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'scanner-cb';
+      cb.value = s.name;
+      cb.checked = true;
+      cb.addEventListener('change', function() {
+        var total = container.querySelectorAll('.scanner-cb').length;
+        var checked = container.querySelectorAll('.scanner-cb:checked').length;
+        document.getElementById('scan-tool-all').checked = (checked === total);
+      });
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'scanner-cb-name';
+      nameSpan.textContent = s.name;
+      var descSpan = document.createElement('span');
+      descSpan.className = 'scanner-cb-desc';
+      descSpan.textContent = s.description;
+      div.appendChild(cb);
+      div.appendChild(nameSpan);
+      div.appendChild(descSpan);
+      container.appendChild(div);
+    });
   } catch (ex) {}
 }
-
-function updateScanDesc() {
-  var tool = document.getElementById('scan-tool').value;
-  if (tool === 'all') {
-    document.getElementById('scan-desc').textContent = 'Run all available scanners: ' + scanners.map(function(s) { return s.name; }).join(', ');
-    return;
-  }
-  var s = scanners.find(function(x) { return x.name === tool; });
-  document.getElementById('scan-desc').textContent = s ? s.description : '';
-}
-
-document.getElementById('scan-tool').addEventListener('change', updateScanDesc);
 
 function openScanModal() {
   if (!currentProject) return;
@@ -1321,11 +1429,12 @@ document.getElementById('scan-overlay').addEventListener('click', function(e) {
 document.getElementById('scan-launch').addEventListener('click', async function() {
   var repoUrl = document.getElementById('scan-repo-url').value.trim();
   var branch = document.getElementById('scan-branch').value.trim();
-  var tool = document.getElementById('scan-tool').value;
+  var selectedTools = Array.from(document.querySelectorAll('.scanner-cb:checked')).map(function(cb) { return cb.value; });
 
   if (!repoUrl) { toast('Enter a repository URL', true); return; }
   if (!/^https?:\/\//i.test(repoUrl)) { toast('URL must start with http:// or https://', true); return; }
   if (!currentProject) { toast('Select a project first', true); return; }
+  if (!selectedTools.length) { toast('Select at least one scanner', true); return; }
 
   try {
     var r = await fetch(API + '/api/scans', {
@@ -1333,7 +1442,7 @@ document.getElementById('scan-launch').addEventListener('click', async function(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         project_id: currentProject,
-        tool: tool,
+        tools: selectedTools,
         repo_url: repoUrl,
         branch: branch || null
       })
@@ -1341,7 +1450,7 @@ document.getElementById('scan-launch').addEventListener('click', async function(
     var d = await r.json();
     if (!r.ok) { toast(d.error || 'Failed to launch scan', true); return; }
     var count = d.count || 1;
-    toast(count > 1 ? count + ' scans launched' : 'Scan launched: ' + tool);
+    toast(count > 1 ? count + ' scans launched' : 'Scan launched: ' + selectedTools[0]);
     closeScanModal();
     pollScans();
   } catch (ex) {
@@ -1356,6 +1465,98 @@ var settingsFields = [
   {id: 'settings-github-token', key: 'github_token'}
 ];
 var settingsToDelete = {};
+
+// -- Custom Semgrep Rules --
+async function loadSemgrepRules() {
+  var list = document.getElementById('semgrep-rules-list');
+  list.textContent = '';
+  try {
+    var r = await fetch(API + '/api/semgrep-rules');
+    var rules = await r.json();
+    if (!rules.length) {
+      var empty = document.createElement('div');
+      empty.className = 'rule-empty';
+      empty.textContent = 'No custom rules configured';
+      list.appendChild(empty);
+      return;
+    }
+    rules.forEach(function(rule) {
+      var div = document.createElement('div');
+      div.className = 'rule-item';
+      var name = document.createElement('span');
+      name.className = 'rule-name';
+      name.textContent = rule.name;
+      name.title = rule.content;
+      var del = document.createElement('button');
+      del.className = 'rule-del';
+      del.title = 'Delete rule';
+      del.textContent = '\u2715';
+      del.addEventListener('click', async function() {
+        await fetch(API + '/api/semgrep-rules/' + rule._id, { method: 'DELETE' });
+        toast('Rule deleted');
+        loadSemgrepRules();
+      });
+      div.appendChild(name);
+      div.appendChild(del);
+      list.appendChild(div);
+    });
+  } catch (ex) {
+    var err = document.createElement('div');
+    err.className = 'rule-empty';
+    err.textContent = 'Failed to load rules';
+    list.appendChild(err);
+  }
+}
+
+async function uploadRuleFiles(files) {
+  var status = document.getElementById('rule-import-status');
+  var ok = 0, fail = 0;
+  status.textContent = 'Importing ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '...';
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i];
+    var name = file.name.replace(/\.(ya?ml)$/i, '');
+    try {
+      var content = await file.text();
+      var r = await fetch(API + '/api/semgrep-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, content: content })
+      });
+      var d = await r.json();
+      if (r.ok) { ok++; } else { fail++; toast(file.name + ': ' + (d.error || 'failed'), true); }
+    } catch (ex) { fail++; toast(file.name + ': network error', true); }
+  }
+  if (ok > 0) {
+    toast(ok + ' rule' + (ok > 1 ? 's' : '') + ' imported');
+    loadSemgrepRules();
+  }
+  status.textContent = ok > 0 ? ok + ' imported' + (fail > 0 ? ', ' + fail + ' failed' : '') : '';
+  setTimeout(function() { status.textContent = ''; }, 3000);
+}
+
+document.getElementById('rule-file-input').addEventListener('change', function(e) {
+  var files = Array.from(e.target.files).filter(function(f) {
+    return /\.ya?ml$/i.test(f.name);
+  });
+  if (files.length) uploadRuleFiles(files);
+  e.target.value = '';
+});
+
+(function() {
+  var label = document.getElementById('rule-import-label');
+  label.addEventListener('dragover', function(e) { e.preventDefault(); label.classList.add('dragover'); });
+  label.addEventListener('dragleave', function() { label.classList.remove('dragover'); });
+  label.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    label.classList.remove('dragover');
+    var files = Array.from(e.dataTransfer.files).filter(function(f) {
+      return /\.ya?ml$/i.test(f.name);
+    });
+    if (!files.length) { toast('No .yml/.yaml files found', true); return; }
+    uploadRuleFiles(files);
+  });
+})();
 
 async function openSettings() {
   settingsToDelete = {};
@@ -1379,6 +1580,7 @@ async function openSettings() {
     });
   }
   document.getElementById('settings-overlay').classList.add('open');
+  loadSemgrepRules();
 }
 
 function closeSettings() {

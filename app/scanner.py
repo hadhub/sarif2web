@@ -89,15 +89,16 @@ def _get_scanner_env(settings=None):
     return env
 
 
-def _run_scanner_command(tool, repo_dir, output_file, env=None):
+def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=None):
     """Run the appropriate scanner command and return (success, stdout, stderr)."""
-    timeout = 600
+    timeout = 1800
     run_kw = dict(capture_output=True, text=True, timeout=timeout)
     if env is not None:
         run_kw["env"] = env
 
     try:
         if tool == "semgrep":
+            extra_configs = [f"--config={p}" for p in (custom_configs or [])]
             semgrep_token = get_settings_dict().get("semgrep_token")
             use_ci = bool(semgrep_token)
             if use_ci:
@@ -106,15 +107,15 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None):
                 ci_kw = dict(run_kw)
                 ci_kw["env"] = ci_env
                 ci_kw["cwd"] = repo_dir
-                cmd = ["semgrep", "ci", "--sarif", f"--sarif-output={output_file}"]
+                cmd = ["semgrep", "ci", "--sarif", f"--sarif-output={output_file}", "--timeout=300"] + extra_configs
                 result = subprocess.run(cmd, **ci_kw)
                 combined = (result.stdout or "") + (result.stderr or "")
                 if "API token not valid" in combined or "HTTP 401" in combined:
                     use_ci = False
             if not use_ci:
                 subprocess.run(["semgrep", "logout"], capture_output=True, text=True, timeout=10)
-                cmd = ["semgrep", "scan", "--config=p/default",
-                       "--metrics=off", "--sarif", f"--sarif-output={output_file}", repo_dir]
+                cmd = ["semgrep", "scan", "--config=p/default"] + extra_configs + [
+                       "--metrics=off", "--timeout=300", "--sarif", f"--sarif-output={output_file}", repo_dir]
                 result = subprocess.run(cmd, **run_kw)
             return result.returncode in (0, 1), result.stdout, result.stderr
 
@@ -217,7 +218,20 @@ def run_scan(scan_id):
         _update_scan(scan_id, status="running")
         output_file = os.path.join(tmpdir, "output.json")
 
-        success, stdout, stderr = _run_scanner_command(tool, repo_dir, output_file, env=scanner_env)
+        custom_configs = []
+        if tool == "semgrep":
+            from db import semgrep_rules_col
+            custom_rules = list(semgrep_rules_col.find())
+            if custom_rules:
+                rules_dir = os.path.join(tmpdir, "custom_rules")
+                os.makedirs(rules_dir, exist_ok=True)
+                for i, rule in enumerate(custom_rules):
+                    rule_path = os.path.join(rules_dir, f"rule_{i}.yaml")
+                    with open(rule_path, "w") as rf:
+                        rf.write(rule["content"])
+                    custom_configs.append(rule_path)
+
+        success, stdout, stderr = _run_scanner_command(tool, repo_dir, output_file, env=scanner_env, custom_configs=custom_configs)
 
         log_text = (stdout + "\n" + stderr)[:10000]
         _update_scan(scan_id, log=log_text)
@@ -286,7 +300,7 @@ def run_scan(scan_id):
 
     except subprocess.TimeoutExpired:
         _update_scan(scan_id, status="failed",
-                     error="Scanner timed out (10 min limit)",
+                     error="Scanner timed out (30 min limit)",
                      completed_at=datetime.now(timezone.utc))
     except Exception as e:
         _update_scan(scan_id, status="failed",

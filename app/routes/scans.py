@@ -37,7 +37,7 @@ def create_scan():
     data = request.get_json(force=True)
 
     project_id_str = data.get("project_id")
-    tool = data.get("tool")
+    tools_raw = data.get("tools") or data.get("tool")
     repo_url = (data.get("repo_url") or "").strip()
     branch = (data.get("branch") or "").strip() or None
 
@@ -54,7 +54,14 @@ def create_scan():
     if not _validate_repo_url(repo_url):
         return jsonify({"error": "invalid repo URL — only http:// and https:// URLs are allowed"}), 400
 
-    tools_to_run = list(SCANNERS.keys()) if tool == "all" else [tool]
+    if isinstance(tools_raw, list):
+        tools_to_run = tools_raw
+    elif tools_raw == "all":
+        tools_to_run = list(SCANNERS.keys())
+    elif tools_raw:
+        tools_to_run = [tools_raw]
+    else:
+        return jsonify({"error": "at least one scanner is required"}), 400
 
     for t in tools_to_run:
         if t not in SCANNERS:
