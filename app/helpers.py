@@ -19,26 +19,45 @@ def compute_dedup_hash(finding):
 
 
 def insert_findings_for_project(project_id, findings, fmt, filename="scan"):
-    """Insert findings with deduplication. Returns (inserted_count, duplicates_removed)."""
+    """Insert findings with deduplication. Returns (inserted_count, duplicates_removed).
+
+    A new finding whose hash matches a soft-deleted one in the project restores
+    that document (unsets deleted_at) instead of being treated as a duplicate,
+    preserving the original triage history (status, notes, created_at).
+    """
     now = datetime.now(timezone.utc)
 
     for fnd in findings:
         fnd["dedup_hash"] = compute_dedup_hash(fnd)
 
     duplicates_removed = 0
+    restored_count = 0
     if findings:
         new_hashes = [fnd["dedup_hash"] for fnd in findings]
-        existing = set(
-            doc["dedup_hash"]
-            for doc in findings_col.find(
-                {"project_id": project_id, "dedup_hash": {"$in": new_hashes}},
-                {"dedup_hash": 1},
+        active_hashes = set()
+        deleted_hashes = set()
+        for doc in findings_col.find(
+            {"project_id": project_id, "dedup_hash": {"$in": new_hashes}},
+            {"dedup_hash": 1, "deleted_at": 1},
+        ):
+            if "deleted_at" in doc:
+                deleted_hashes.add(doc["dedup_hash"])
+            else:
+                active_hashes.add(doc["dedup_hash"])
+
+        hashes_to_restore = deleted_hashes - active_hashes
+        if hashes_to_restore:
+            result = findings_col.update_many(
+                {"project_id": project_id,
+                 "dedup_hash": {"$in": list(hashes_to_restore)},
+                 "deleted_at": {"$exists": True}},
+                {"$set": {"updated_at": now}, "$unset": {"deleted_at": ""}},
             )
-        )
-        if existing:
-            original_count = len(findings)
-            findings = [fnd for fnd in findings if fnd["dedup_hash"] not in existing]
-            duplicates_removed = original_count - len(findings)
+            restored_count = result.modified_count
+
+        seen_hashes = active_hashes | hashes_to_restore
+        findings = [fnd for fnd in findings if fnd["dedup_hash"] not in seen_hashes]
+        duplicates_removed = sum(1 for h in new_hashes if h in active_hashes)
 
     if findings:
         for fnd in findings:
@@ -47,9 +66,10 @@ def insert_findings_for_project(project_id, findings, fmt, filename="scan"):
             fnd["updated_at"] = now
         findings_col.insert_many(findings)
 
-    projects_col.update_one({"_id": project_id}, {"$inc": {"finding_count": len(findings)}})
+    inserted_count = len(findings) + restored_count
+    projects_col.update_one({"_id": project_id}, {"$inc": {"finding_count": inserted_count}})
 
-    return len(findings), duplicates_removed
+    return inserted_count, duplicates_removed
 
 
 def serialize(doc):

@@ -100,14 +100,16 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
         if tool == "semgrep":
             extra_configs = [f"--config={p}" for p in (custom_configs or [])]
             semgrep_token = get_settings_dict().get("semgrep_token")
-            use_ci = bool(semgrep_token)
+            # `semgrep ci` rejects extra --config flags while logged in, so fall
+            # back to `semgrep scan` whenever custom rules are provided.
+            use_ci = bool(semgrep_token) and not extra_configs
             if use_ci:
                 ci_env = dict(env or os.environ.copy())
                 ci_env["SEMGREP_APP_TOKEN"] = semgrep_token
                 ci_kw = dict(run_kw)
                 ci_kw["env"] = ci_env
                 ci_kw["cwd"] = repo_dir
-                cmd = ["semgrep", "ci", "--sarif", f"--sarif-output={output_file}", "--timeout=300"] + extra_configs
+                cmd = ["semgrep", "ci", "--sarif", f"--sarif-output={output_file}", "--timeout=300"]
                 result = subprocess.run(cmd, **ci_kw)
                 combined = (result.stdout or "") + (result.stderr or "")
                 if "API token not valid" in combined or "HTTP 401" in combined:

@@ -77,6 +77,107 @@ def upload():
     })
 
 
+SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
+
+
+def _finding_to_sarif_result(fnd, tool_name):
+    locations = []
+    for loc in fnd.get("all_locations") or []:
+        region = {
+            "startLine": loc.get("start_line") or 1,
+            "endLine": loc.get("end_line") or loc.get("start_line") or 1,
+        }
+        if loc.get("start_col"):
+            region["startColumn"] = loc["start_col"]
+        if loc.get("end_col"):
+            region["endColumn"] = loc["end_col"]
+        if loc.get("snippet"):
+            region["snippet"] = {"text": loc["snippet"]}
+        locations.append({
+            "physicalLocation": {
+                "artifactLocation": {"uri": loc.get("file", "")},
+                "region": region,
+            }
+        })
+
+    if not locations and fnd.get("file"):
+        region = {
+            "startLine": fnd.get("start_line") or 1,
+            "endLine": fnd.get("end_line") or fnd.get("start_line") or 1,
+        }
+        if fnd.get("snippet"):
+            region["snippet"] = {"text": fnd["snippet"]}
+        locations.append({
+            "physicalLocation": {
+                "artifactLocation": {"uri": fnd["file"]},
+                "region": region,
+            }
+        })
+
+    code_flows = []
+    for flow in fnd.get("code_flows") or []:
+        tf_locations = []
+        for step in flow:
+            region = {"startLine": step.get("line") or 1}
+            if step.get("snippet"):
+                region["snippet"] = {"text": step["snippet"]}
+            tf_locations.append({
+                "location": {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": step.get("file", "")},
+                        "region": region,
+                    },
+                    "message": {"text": step.get("message", "")},
+                }
+            })
+        if tf_locations:
+            code_flows.append({"threadFlows": [{"locations": tf_locations}]})
+
+    result = {
+        "ruleId": fnd.get("rule_id", "unknown"),
+        "level": fnd.get("level", "warning"),
+        "message": {"text": fnd.get("message", "")},
+        "locations": locations,
+        "properties": {
+            "review_status": fnd.get("status", "new"),
+            "review_notes": fnd.get("notes", ""),
+            "cwes": fnd.get("cwes", []),
+            "owasps": fnd.get("owasps", []),
+            "source_tool": tool_name,
+        },
+    }
+    if code_flows:
+        result["codeFlows"] = code_flows
+    if fnd.get("fingerprint"):
+        result["fingerprints"] = {"matchBasedId/v1": fnd["fingerprint"]}
+    return result
+
+
+def _build_sarif_run(tool_name, findings):
+    rules = {}
+    for fnd in findings:
+        rid = fnd.get("rule_id", "unknown")
+        if rid in rules:
+            continue
+        tag_list = list(fnd.get("tags") or []) + list(fnd.get("cwes") or []) + list(fnd.get("owasps") or [])
+        rule = {
+            "id": rid,
+            "name": fnd.get("rule_name") or rid,
+            "shortDescription": {"text": fnd.get("short_desc", "")},
+            "fullDescription": {"text": fnd.get("description", "")},
+            "defaultConfiguration": {"level": fnd.get("level", "warning")},
+            "properties": {"tags": list(dict.fromkeys(tag_list))},
+        }
+        if fnd.get("help_uri"):
+            rule["helpUri"] = fnd["help_uri"]
+        rules[rid] = rule
+
+    return {
+        "tool": {"driver": {"name": tool_name, "rules": list(rules.values())}},
+        "results": [_finding_to_sarif_result(f, tool_name) for f in findings],
+    }
+
+
 @bp.route("/api/export/<project_id>", methods=["GET"])
 def export_sarif(project_id):
     try:
@@ -88,35 +189,19 @@ def export_sarif(project_id):
     if not project:
         return jsonify({"error": "not found"}), 404
 
-    findings_map = {f["fingerprint"]: f for f in findings_col.find({"project_id": pid}) if f.get("fingerprint")}
+    findings = list(findings_col.find({"project_id": pid, "deleted_at": {"$exists": False}}))
 
-    def inject_review(sarif_data):
-        for run in sarif_data.get("runs", []):
-            for result in run.get("results", []):
-                fp = result.get("fingerprints", {}).get("matchBasedId/v1", "")
-                if fp in findings_map:
-                    props = result.setdefault("properties", {})
-                    props["review_status"] = findings_map[fp]["status"]
-                    props["review_notes"] = findings_map[fp].get("notes", "")
+    by_tool = {}
+    for fnd in findings:
+        by_tool.setdefault(fnd.get("source_tool") or "Unknown", []).append(fnd)
 
-    original_sarifs = project.get("original_sarifs", [])
-    old_sarif = project.get("original_sarif")
+    runs = [_build_sarif_run(tool, items) for tool, items in sorted(by_tool.items())]
 
-    if original_sarifs:
-        merged = {"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json", "version": "2.1.0", "runs": []}
-        for entry in original_sarifs:
-            data = entry.get("data", {})
-            if isinstance(data, dict) and "runs" in data:
-                inject_review(data)
-                merged["runs"].extend(data["runs"])
-            else:
-                merged["runs"].append({"tool": {"driver": {"name": entry.get("format", "unknown")}}, "results": [], "_importedData": data})
-        export_data = merged
-    elif old_sarif:
-        inject_review(old_sarif)
-        export_data = old_sarif
-    else:
-        export_data = {"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json", "version": "2.1.0", "runs": []}
+    export_data = {
+        "$schema": SARIF_SCHEMA,
+        "version": "2.1.0",
+        "runs": runs,
+    }
 
     filename = project["name"]
     if not filename.endswith(".sarif") and not filename.endswith(".json"):
