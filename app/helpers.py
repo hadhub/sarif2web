@@ -18,21 +18,25 @@ def compute_dedup_hash(finding):
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-def insert_findings_for_project(project_id, findings, fmt, filename="scan"):
-    """Insert findings with deduplication. Returns (inserted_count, duplicates_removed).
+def insert_findings_for_project(project_id, findings, fmt, filename="scan", *, deduplicate=True,
+                                correlate=False, repo_scope="", repo_dir=""):
+    """Insert findings, optionally deduplicating. Returns (inserted_count, duplicates_removed).
 
     A new finding whose hash matches a soft-deleted one in the project restores
     that document (unsets deleted_at) instead of being treated as a duplicate,
     preserving the original triage history (status, notes, created_at).
     """
     now = datetime.now(timezone.utc)
+    if correlate:
+        from correlation import insert_scan_findings
+        return insert_scan_findings(project_id, findings, repo_scope, repo_dir, now)
 
     for fnd in findings:
         fnd["dedup_hash"] = compute_dedup_hash(fnd)
 
     duplicates_removed = 0
     restored_count = 0
-    if findings:
+    if findings and deduplicate:
         new_hashes = [fnd["dedup_hash"] for fnd in findings]
         active_hashes = set()
         deleted_hashes = set()
@@ -76,6 +80,7 @@ def serialize(doc):
     """Serialize a finding document for JSON response."""
     doc["_id"] = str(doc["_id"])
     doc["project_id"] = str(doc["project_id"])
+    doc.pop("secret_hash", None)
     if "created_at" in doc:
         doc["created_at"] = doc["created_at"].isoformat()
     if "updated_at" in doc:

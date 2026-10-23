@@ -13,11 +13,15 @@ def detect_format(raw_text):
                 return "sarif", data
         except json.JSONDecodeError:
             pass
-    # gitleaks JSON is a top-level array with RuleID + Fingerprint
+    # Gitleaks writes [] for a successful scan with no leaks.
+    # Non-empty reports contain RuleID + Fingerprint in every entry.
     if stripped.startswith("["):
         try:
             data = json.loads(stripped)
-            if isinstance(data, list) and data and "RuleID" in data[0] and "Fingerprint" in data[0]:
+            if isinstance(data, list) and all(
+                isinstance(item, dict) and "RuleID" in item and "Fingerprint" in item
+                for item in data
+            ):
                 return "gitleaks", data
         except json.JSONDecodeError:
             pass
@@ -125,6 +129,8 @@ def parse_trufflehog(results):
                 f"source:{result.get('SourceName', 'unknown')}",
             ],
             "source_tool": "TruffleHog",
+            "secret_hash": hashlib.sha256(result["Raw"].encode()).hexdigest()
+                if isinstance(result.get("Raw"), str) and result["Raw"] else "",
             "fingerprint": fingerprint,
             "status": "new",
             "notes": "",
@@ -199,6 +205,7 @@ def parse_gitleaks(results):
             "owasps": [],
             "tags": tags + [f"rule:{rule_id}"],
             "source_tool": "gitleaks",
+            "secret_hash": hashlib.sha256(secret.encode()).hexdigest() if secret else "",
             "fingerprint": fingerprint or hashlib.sha256(
                 f"{rule_id}:{file_path}:{start_line}:{commit}".encode()
             ).hexdigest()[:32],
@@ -223,6 +230,12 @@ def parse_sarif(sarif_data):
         for result in run.get("results", []):
             rule_id = result.get("ruleId", "unknown")
             rule = rules.get(rule_id, {})
+            properties = result.get("properties") or {}
+            dependency = {
+                "vulnerability": properties.get("vulnerabilityId") or properties.get("cve"),
+                "package": properties.get("packageName"),
+                "version": properties.get("packageVersion"),
+            }
 
             level = result.get("level")
             if not level or level == "none":
@@ -280,7 +293,14 @@ def parse_sarif(sarif_data):
                 "owasps": owasps,
                 "tags": tags,
                 "source_tool": result.get("properties", {}).get("source_tool", tool_name),
+                "dependency": dependency if all(dependency.values()) else {},
                 "fingerprint": result.get("fingerprints", {}).get("matchBasedId/v1", ""),
+                "scanner_fingerprints": {
+                    prefix + key: value
+                    for prefix, values in (("full:", result.get("fingerprints") or {}),
+                                           ("partial:", result.get("partialFingerprints") or {}))
+                    for key, value in values.items()
+                },
                 "status": "new",
                 "notes": "",
             })

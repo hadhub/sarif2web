@@ -3,7 +3,7 @@ import json
 from bson import ObjectId
 from flask import Blueprint, Response, jsonify, request
 
-from db import findings_col, projects_col
+from db import findings_col, observations_col, projects_col
 from helpers import insert_findings_for_project
 from parsers import detect_format, parse_gitleaks, parse_sarif, parse_trufflehog
 
@@ -144,6 +144,8 @@ def _finding_to_sarif_result(fnd, tool_name):
             "cwes": fnd.get("cwes", []),
             "owasps": fnd.get("owasps", []),
             "source_tool": tool_name,
+            "finding_id": str(fnd.get("finding_id") or fnd.get("_id", "")),
+            "scan_id": fnd.get("scan_id", ""),
         },
     }
     if code_flows:
@@ -193,7 +195,11 @@ def export_sarif(project_id):
 
     by_tool = {}
     for fnd in findings:
-        by_tool.setdefault(fnd.get("source_tool") or "Unknown", []).append(fnd)
+        observations = list(observations_col.find({"finding_id": fnd["_id"]})) if fnd.get("correlation_key") else []
+        for observation in observations or [fnd]:
+            observation["status"] = fnd.get("status", "new")
+            observation["notes"] = fnd.get("notes", "")
+            by_tool.setdefault(observation.get("source_tool") or "Unknown", []).append(observation)
 
     runs = [_build_sarif_run(tool, items) for tool, items in sorted(by_tool.items())]
 

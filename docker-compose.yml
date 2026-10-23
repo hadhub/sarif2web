@@ -9,10 +9,12 @@ services:
     build: .
     environment:
       - MONGO_URI=mongodb://mongo:27017/sarif_manager
+      - CODEQL_RAM=${CODEQL_RAM:-4096}
+      - CODEQL_THREADS=${CODEQL_THREADS:-1}
     depends_on:
       - mongo
     tmpfs:
-      - /tmp/scan_repos:size=2G
+      - /tmp/scan_repos:size=8G
     restart: unless-stopped
 
   nginx:

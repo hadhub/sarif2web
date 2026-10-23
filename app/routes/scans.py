@@ -26,6 +26,7 @@ def list_scanners():
     for name, info in SCANNERS.items():
         result.append({
             "name": name,
+            "label": info.get("label", name),
             "description": info["description"],
             "output_format": info["output_format"],
         })
@@ -52,7 +53,7 @@ def create_scan():
         return jsonify({"error": "project not found"}), 404
 
     if not _validate_repo_url(repo_url):
-        return jsonify({"error": "invalid repo URL — only http:// and https:// URLs are allowed"}), 400
+        return jsonify({"error": "invalid repo URL: only http:// and https:// URLs are allowed"}), 400
 
     if isinstance(tools_raw, list):
         tools_to_run = tools_raw

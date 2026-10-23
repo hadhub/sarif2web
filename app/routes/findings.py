@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from flask import Blueprint, Response, jsonify, request
 
-from db import findings_col, projects_col
+from db import findings_col, observations_col, projects_col
 from helpers import STATUSES, serialize
 from svg import render_finding_svg
 
@@ -33,7 +33,8 @@ def list_findings():
 
     tool = request.args.get("tool")
     if tool:
-        query["source_tool"] = {"$in": tool.split(",")}
+        query["$and"] = [{"$or": [{"source_tools": {"$in": tool.split(",")}},
+                                    {"source_tool": {"$in": tool.split(",")}}]}]
 
     search = request.args.get("q", "").strip()[:256]
     if search:
@@ -43,6 +44,7 @@ def list_findings():
             {"file": {"$regex": escaped, "$options": "i"}},
             {"message": {"$regex": escaped, "$options": "i"}},
             {"snippet": {"$regex": escaped, "$options": "i"}},
+            {"_id": ObjectId(search)} if ObjectId.is_valid(search) else {"source_tools": search},
         ]
 
     try:
@@ -58,6 +60,12 @@ def list_findings():
     total = findings_col.count_documents(query)
     docs = list(cursor.skip((page - 1) * per_page).limit(per_page))
 
+    # Potential links may outlive a deletion; only expose active targets.
+    candidate_ids = {ObjectId(i) for d in docs for i in d.get("potential_duplicates", []) if ObjectId.is_valid(i)}
+    active = {str(d["_id"]) for d in findings_col.find(
+        {"_id": {"$in": list(candidate_ids)}, "project_id": pid, "deleted_at": {"$exists": False}}, {"_id": 1})} if candidate_ids else set()
+    for d in docs:
+        d["potential_duplicates"] = [i for i in d.get("potential_duplicates", []) if i in active]
     return jsonify({
         "findings": [serialize(d) for d in docs],
         "total": total,
@@ -95,10 +103,38 @@ def finding_counts():
         c = doc["count"]
         levels[lvl] = levels.get(lvl, 0) + c
         statuses[st] = statuses.get(st, 0) + c
-        tools[tl] = tools.get(tl, 0) + c
         total += c
 
+    for doc in findings_col.aggregate([
+        {"$match": {"project_id": pid, "deleted_at": {"$exists": False}}},
+        {"$project": {"tools": {"$ifNull": ["$source_tools", ["$source_tool"]]}}},
+        {"$unwind": "$tools"}, {"$group": {"_id": "$tools", "count": {"$sum": 1}}},
+    ]):
+        tools[doc["_id"] or "Unknown"] = doc["count"]
+
     return jsonify({"levels": levels, "statuses": statuses, "tools": tools, "total": total})
+
+
+@bp.route("/api/findings/<finding_id>/observations", methods=["GET"])
+def finding_observations(finding_id):
+    if not ObjectId.is_valid(finding_id):
+        return jsonify({"error": "invalid id"}), 400
+    fid = ObjectId(finding_id)
+    issue = findings_col.find_one({"_id": fid, "deleted_at": {"$exists": False}})
+    if not issue:
+        return jsonify({"error": "not found"}), 404
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    docs = list(observations_col.find({"finding_id": fid}).sort("observed_at", -1)
+                .skip((page - 1) * 50).limit(50))
+    for d in docs:
+        d["finding_id"] = str(d["finding_id"])
+        d["observed_at"] = d["observed_at"].isoformat()
+        d.pop("secret_hash", None)
+    return jsonify({"observations": [serialize(d) for d in docs], "page": page,
+                    "total": observations_col.count_documents({"finding_id": fid})})
 
 
 @bp.route("/api/findings/<finding_id>", methods=["PATCH"])

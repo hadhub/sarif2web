@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from flask import Blueprint, jsonify, request
 
-from db import findings_col, projects_col
+from db import findings_col, observations_col, projects_col
 from helpers import serialize_project
 
 bp = Blueprint("projects", __name__)
@@ -40,6 +40,7 @@ def delete_project(project_id):
     except Exception:
         return jsonify({"error": "invalid id"}), 400
     findings_col.delete_many({"project_id": pid})
+    observations_col.delete_many({"project_id": pid})
     projects_col.delete_one({"_id": pid})
     return jsonify({"ok": True})
 
@@ -55,5 +56,6 @@ def bulk_delete_projects():
     except Exception:
         return jsonify({"error": "invalid id in list"}), 400
     findings_col.delete_many({"project_id": {"$in": oids}})
+    observations_col.delete_many({"project_id": {"$in": oids}})
     result = projects_col.delete_many({"_id": {"$in": oids}})
     return jsonify({"ok": True, "deleted": result.deleted_count})

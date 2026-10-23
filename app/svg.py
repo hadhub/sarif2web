@@ -7,47 +7,47 @@ E = html.escape
 
 def _severity_color(level, dark=True):
     if dark:
-        return {"error": "#ff5555", "warning": "#ffb86c", "note": "#8be9fd", "info": "#8be9fd"}.get(level, "#6272a4")
-    return {"error": "#c0392b", "warning": "#e67e22", "note": "#2980b9", "info": "#2980b9"}.get(level, "#7f8c8d")
+        return {"error": "#f28b95", "warning": "#f0bc73", "note": "#88baf5", "info": "#88baf5"}.get(level, "#9aaabe")
+    return {"error": "#bc3448", "warning": "#9a600a", "note": "#2567af", "info": "#2567af"}.get(level, "#596b80")
 
 
 def _theme_palette(dark=True):
     if dark:
         return {
-            "canvas_bg": "#282a36",
-            "box_bg": "#44475a",
-            "box_text": "#f8f8f2",
-            "box_sub": "#6272a4",
-            "detail_bg": "#343746",
-            "detail_border": "#6272a4",
-            "detail_text": "#f8f8f2",
-            "detail_danger": "#ff5555",
-            "file_ref": "#6272a4",
-            "desc_bg": "#343746",
-            "desc_border": "#6272a4",
-            "desc_text": "#cdd6f4",
-            "rule_color": "#bd93f9",
-            "source_color": "#ff5555",
-            "sink_color": "#ff5555",
-            "step_color": "#8be9fd",
+            "canvas_bg": "#0e131b",
+            "box_bg": "#151c26",
+            "box_text": "#e9eef5",
+            "box_sub": "#9aaabe",
+            "detail_bg": "#19222e",
+            "detail_border": "#2b3747",
+            "detail_text": "#e9eef5",
+            "detail_danger": "#f28b95",
+            "file_ref": "#9aaabe",
+            "desc_bg": "#151c26",
+            "desc_border": "#2b3747",
+            "desc_text": "#9aaabe",
+            "rule_color": "#73ddbe",
+            "source_color": "#73ddbe",
+            "sink_color": "#f28b95",
+            "step_color": "#88baf5",
         }
     return {
-        "canvas_bg": "#fafafa",
-        "box_bg": "white",
-        "box_text": "#2c3e50",
-        "box_sub": "#7f8c8d",
-        "detail_bg": "#f8f9fa",
-        "detail_border": "#dee2e6",
-        "detail_text": "#495057",
-        "detail_danger": "#c0392b",
-        "file_ref": "#6c757d",
-        "desc_bg": "#eef2f7",
-        "desc_border": "#bdc3c7",
-        "desc_text": "#34495e",
-        "rule_color": "#8e44ad",
-        "source_color": "#e74c3c",
-        "sink_color": "#c0392b",
-        "step_color": "#3498db",
+        "canvas_bg": "#f3f6f9",
+        "box_bg": "#ffffff",
+        "box_text": "#1c2b3e",
+        "box_sub": "#596b80",
+        "detail_bg": "#f7f9fb",
+        "detail_border": "#dce3eb",
+        "detail_text": "#1c2b3e",
+        "detail_danger": "#bc3448",
+        "file_ref": "#596b80",
+        "desc_bg": "#ffffff",
+        "desc_border": "#dce3eb",
+        "desc_text": "#596b80",
+        "rule_color": "#087f65",
+        "source_color": "#087f65",
+        "sink_color": "#bc3448",
+        "step_color": "#2567af",
     }
 
 
@@ -97,66 +97,69 @@ def render_finding_svg(finding, finding_index=0, dark=True):
     n_locations = len(locations)
 
     source_tool = finding.get("source_tool", "")
-    tool_badge = f"  [{source_tool}]" if source_tool else ""
+    tools = finding.get("source_tools") or ([source_tool] if source_tool else [])
+    tool_badge = " · " + ", ".join(tools) if tools else ""
 
     elements.append(f'''
         <defs>
             <marker id="ah-{chain_id}" viewBox="0 0 10 10" refX="9" refY="5"
                     markerWidth="7" markerHeight="5" orient="auto">
-                <path d="M0 0 L10 5 L0 10z" fill="{sev_color}"/>
+                <path d="M0 0 L10 5 L0 10z" fill="{pal['box_sub']}"/>
             </marker>
         </defs>''')
 
-    title_text = f"[{finding['level'].upper()}] {finding['rule_id']}"
+    title_text = finding['rule_id']
+    display_title = title_text if len(title_text) <= 100 else title_text[:97] + "..."
     count_text = f"x{n_locations}" if n_locations > 1 else ""
 
     elements.append(f'''
-        <rect x="10" y="10" width="{CANVAS_W - 20}" height="38" rx="5"
-              fill="{sev_color}" opacity="0.9"/>
-        <text x="22" y="34" font-size="14" font-weight="bold" fill="white"
-              font-family="monospace">{E(title_text)}{E(tool_badge)}</text>
-        <text x="{CANVAS_W - 30}" y="34" font-size="12" fill="white" text-anchor="end"
-              font-family="monospace">{E(cwe_label)}  {E(count_text)}</text>''')
+        <rect x="{MARGIN_X}" y="18" width="{CANVAS_W - MARGIN_X * 2}" height="68" rx="10"
+              fill="{pal['box_bg']}" stroke="{pal['detail_border']}"/>
+        <text x="{MARGIN_X + 18}" y="42" font-size="11" font-weight="600" fill="{sev_color}">
+              {E(finding['level'].upper())}{E(tool_badge)}</text>
+        <text x="{MARGIN_X + 18}" y="65" font-size="16" font-weight="600" fill="{pal['box_text']}"><title>{E(title_text)}</title>{E(display_title)}</text>
+        <text x="{CANVAS_W - MARGIN_X - 18}" y="42" font-size="12" fill="{pal['box_sub']}" text-anchor="end">
+              {E(cwe_label)}  {E(count_text)}</text>''')
 
-    cursor_y = 58
+    cursor_y = 104
 
     def _draw_step(label, label_color, title, subtitle, detail_text, file_ref, y):
         parts = []
         detail_lines = _wrap_text(detail_text, 62)
-        detail_h = max(BOX_H, len(detail_lines) * 16 + 30)
+        detail_h = max(BOX_H, len(detail_lines) * 18 + 38)
         row_h = max(BOX_H, detail_h)
 
         parts.append(f'''
         <g transform="translate({LEFT_X}, {y})">
-            <rect width="{BOX_W}" height="24" rx="3" fill="{label_color}" opacity="0.85"/>
-            <text x="{BOX_W // 2}" y="16" text-anchor="middle" font-size="11" fill="white"
-                  font-weight="bold" font-family="monospace">{E(label)}</text>
-            <rect y="24" width="{BOX_W}" height="{row_h - 24}" fill="{pal['box_bg']}"
-                  stroke="{label_color}" stroke-width="2"/>
-            <text x="{BOX_W // 2}" y="46" text-anchor="middle" font-size="13"
-                  font-weight="bold" fill="{pal['box_text']}" font-family="monospace">{E(title)}</text>
-            <text x="{BOX_W // 2}" y="64" text-anchor="middle" font-size="11"
+            <rect width="{BOX_W}" height="{row_h}" rx="10" fill="{pal['box_bg']}"
+                  stroke="{pal['detail_border']}"/>
+            <rect x="0" y="13" width="3" height="{row_h - 26}" rx="1.5" fill="{label_color}"/>
+            <text x="18" y="22" font-size="10" fill="{label_color}"
+                  font-weight="600" letter-spacing="1">{E(label)}</text>
+            <text x="18" y="45" font-size="15"
+                  font-weight="600" fill="{pal['box_text']}"><title>{E(title)}</title>{E(title if len(title) <= 60 else title[:57] + '...')}</text>
+            <text x="18" y="65" font-size="12"
                   fill="{pal['box_sub']}" font-family="monospace">{E(subtitle)}</text>
         </g>''')
 
         parts.append(f'''
         <g transform="translate({RIGHT_X}, {y})">
-            <rect width="{DETAIL_W}" height="{row_h}" rx="4" fill="{pal['detail_bg']}"
-                  stroke="{pal['detail_border']}" stroke-width="1" stroke-dasharray="4,2"/>''')
+            <rect width="{DETAIL_W}" height="{row_h}" rx="10" fill="{pal['detail_bg']}"
+                  stroke="{pal['detail_border']}" stroke-width="1"/>''')
         for li, line in enumerate(detail_lines):
             clr = pal["detail_danger"] if any(kw in line.lower() for kw in [
                 "danger", "vulner", "inject", "unsanit", "malicious",
             ]) else pal["detail_text"]
             parts.append(f'''
-            <text x="12" y="{18 + li * 16}" font-size="11" fill="{clr}"
+            <text x="14" y="{22 + li * 18}" font-size="12" fill="{clr}"
                   font-family="monospace">{E(line)}</text>''')
 
         file_display = file_ref
         if len(file_display) > 64:
             file_display = "..." + file_display[-61:]
         parts.append(f'''
-            <text x="12" y="{row_h - 6}" font-size="10" fill="{pal['file_ref']}"
-                  font-style="italic" font-family="monospace">{E(file_display)}</text>
+            <text x="14" y="{row_h - 12}" font-size="11" fill="{pal['file_ref']}"
+                  font-family="monospace">{E(file_display)}</text>
         </g>''')
 
         return "\n".join(parts), row_h
@@ -185,7 +188,7 @@ def render_finding_svg(finding, finding_index=0, dark=True):
 
             elements.append(f'''
         <line x1="{ARROW_X}" y1="{cursor_y - GAP_Y + 3}" x2="{ARROW_X}" y2="{cursor_y - 3}"
-              stroke="{sev_color}" stroke-width="2" marker-end="url(#ah-{chain_id})"/>''')
+              stroke="{pal['box_sub']}" stroke-width="1.5" marker-end="url(#ah-{chain_id})"/>''')
 
             step_svg, step_h = _draw_step(
                 label=label, label_color=color,
@@ -202,7 +205,7 @@ def render_finding_svg(finding, finding_index=0, dark=True):
         for li, loc in enumerate(locations):
             elements.append(f'''
         <line x1="{ARROW_X}" y1="{cursor_y - GAP_Y + 3}" x2="{ARROW_X}" y2="{cursor_y - 3}"
-              stroke="{sev_color}" stroke-width="2" marker-end="url(#ah-{chain_id})"/>''')
+              stroke="{pal['box_sub']}" stroke-width="1.5" marker-end="url(#ah-{chain_id})"/>''')
 
             step_svg, step_h = _draw_step(
                 label=f"FINDING {li + 1}/{n_locations}" if n_locations > 1 else "FINDING",
@@ -218,7 +221,7 @@ def render_finding_svg(finding, finding_index=0, dark=True):
     else:
         elements.append(f'''
         <line x1="{ARROW_X}" y1="{cursor_y - GAP_Y + 3}" x2="{ARROW_X}" y2="{cursor_y - 3}"
-              stroke="{sev_color}" stroke-width="2" marker-end="url(#ah-{chain_id})"/>''')
+              stroke="{pal['box_sub']}" stroke-width="1.5" marker-end="url(#ah-{chain_id})"/>''')
 
         file_list_lines = [f"{loc['file']}:{loc['start_line']}" for loc in locations]
         snippet = locations[0]["snippet"] if locations else ""
@@ -241,24 +244,25 @@ def render_finding_svg(finding, finding_index=0, dark=True):
     if finding.get("tags"):
         desc += f"\nTags: {', '.join(finding['tags'][:10])}"
     desc_lines = _wrap_text(desc, 128)
-    desc_h = len(desc_lines) * 16 + 22
+    desc_h = len(desc_lines) * 18 + 32
     full_w = CANVAS_W - MARGIN_X * 2
 
     elements.append(f'''
         <g transform="translate({MARGIN_X}, {cursor_y})">
-            <rect width="{full_w}" height="{desc_h}" rx="5"
+            <rect width="{full_w}" height="{desc_h}" rx="10"
                   fill="{pal['desc_bg']}" stroke="{pal['desc_border']}" stroke-width="1"/>''')
     for li, line in enumerate(desc_lines):
         elements.append(f'''
-            <text x="12" y="{18 + li * 16}" font-size="11" fill="{pal['desc_text']}"
-                  font-family="monospace">{E(line)}</text>''')
+            <text x="16" y="{24 + li * 18}" font-size="13" fill="{pal['desc_text']}">{E(line)}</text>''')
     elements.append("</g>")
 
     cursor_y += desc_h + 20
 
     svg_html = f'''<svg xmlns="http://www.w3.org/2000/svg"
          width="{CANVAS_W + 40}" height="{cursor_y}"
-         viewBox="0 0 {CANVAS_W + 40} {cursor_y}">
+         viewBox="0 0 {CANVAS_W + 40} {cursor_y}" role="img"
+         font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+        <title>{E(title_text)}</title>
         <rect width="100%" height="100%" fill="{pal['canvas_bg']}" rx="6"/>
         {"".join(elements)}
     </svg>'''

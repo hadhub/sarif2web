@@ -2,13 +2,16 @@ import ipaddress
 import json
 import os
 import re
+import shlex
 import shutil
 import socket
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+from codeql_runner import run_codeql
 from crypto import decrypt
 from db import projects_col, scans_col, settings_col
 from helpers import insert_findings_for_project
@@ -16,8 +19,9 @@ from parsers import detect_format, parse_gitleaks, parse_sarif, parse_trufflehog
 
 SCANNERS = {
     "semgrep":    {"cmd": "semgrep", "output_format": "sarif",      "description": "SAST scanner for 30+ languages. Uses 'semgrep ci' with Semgrep Cloud rules when token is set, otherwise falls back to 'semgrep scan'.", "requires_token": None},
-    "snyk":       {"cmd": "snyk", "output_format": "sarif",         "description": "Snyk Code — finds vulnerabilities using semantic analysis. Requires a Snyk token (configure in Settings).", "requires_token": "snyk_token"},
-    "codeql":     {"cmd": "codeql", "output_format": "sarif",       "description": "GitHub CodeQL — deep semantic code analysis engine."},
+    "snyk":       {"cmd": "snyk", "label": "Snyk dependencies", "output_format": "sarif", "description": "Snyk Open Source: checks dependencies for known vulnerabilities and license issues across supported projects. Requires a Snyk token (configure in Settings).", "requires_token": "snyk_token"},
+    "snyk_code":  {"cmd": "snyk", "label": "Snyk Code", "output_format": "sarif", "description": "Checks source code for security vulnerabilities using Snyk Code. Requires a Snyk token with Snyk Code access (configure in Settings).", "requires_token": "snyk_token"},
+    "codeql":     {"cmd": "codeql", "output_format": "sarif",       "description": "GitHub CodeQL: detects all supported languages and runs extended security queries. Swift requires macOS. Results from successful languages are kept if another language fails."},
     "trufflehog": {"cmd": "trufflehog", "output_format": "trufflehog", "description": "Scans for leaked secrets, API keys, and credentials in git history."},
     "gitleaks":   {"cmd": "gitleaks", "output_format": "gitleaks",  "description": "Fast secret scanner using regex and entropy detection."},
 }
@@ -79,17 +83,15 @@ def _get_scanner_env(settings=None):
         settings = get_settings_dict()
     env = os.environ.copy()
     if settings.get("snyk_token"):
+        # The CLI authenticates directly from SNYK_TOKEN. Do not run network
+        # authentication while preparing unrelated scans such as CodeQL.
         env["SNYK_TOKEN"] = settings["snyk_token"]
-        subprocess.run(
-            ["snyk", "auth", settings["snyk_token"], "--auth-type=token"],
-            capture_output=True, text=True, timeout=30, env=env
-        )
     if settings.get("github_token"):
         env["GITHUB_TOKEN"] = settings["github_token"]
     return env
 
 
-def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=None):
+def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=None, on_progress=None):
     """Run the appropriate scanner command and return (success, stdout, stderr)."""
     timeout = 1800
     run_kw = dict(capture_output=True, text=True, timeout=timeout)
@@ -109,11 +111,14 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
                 ci_kw = dict(run_kw)
                 ci_kw["env"] = ci_env
                 ci_kw["cwd"] = repo_dir
-                cmd = ["semgrep", "ci", "--sarif", f"--sarif-output={output_file}", "--timeout=300"]
+                cmd = ["semgrep", "ci", "--no-suppress-errors", "--sarif",
+                       f"--sarif-output={output_file}", "--timeout=300"]
                 result = subprocess.run(cmd, **ci_kw)
-                combined = (result.stdout or "") + (result.stderr or "")
-                if "API token not valid" in combined or "HTTP 401" in combined:
-                    use_ci = False
+                if any(message in (result.stderr or "").lower()
+                       for message in ("invalid api key", "api token not valid", "http 401")):
+                    return False, "", (
+                        "Semgrep rejected the configured API token. Update the Semgrep token in Settings "
+                        "and retry, or remove it to use the default public rules.")
             if not use_ci:
                 subprocess.run(["semgrep", "logout"], capture_output=True, text=True, timeout=10)
                 cmd = ["semgrep", "scan", "--config=p/default"] + extra_configs + [
@@ -122,36 +127,17 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
             return result.returncode in (0, 1), result.stdout, result.stderr
 
         elif tool == "snyk":
+            cmd = ["snyk", "test", "--all-projects", f"--sarif-file-output={output_file}"]
+            result = subprocess.run(cmd, cwd=repo_dir, **run_kw)
+            return result.returncode in (0, 1), result.stdout, result.stderr
+
+        elif tool == "snyk_code":
             cmd = ["snyk", "code", "test", f"--sarif-file-output={output_file}", repo_dir]
             result = subprocess.run(cmd, **run_kw)
             return result.returncode in (0, 1), result.stdout, result.stderr
 
         elif tool == "codeql":
-            db_dir = os.path.join(os.path.dirname(output_file), "codeql-db")
-            lang = "javascript"
-            for ext, l in [(".py", "python"), (".java", "java"), (".go", "go"),
-                           (".rb", "ruby"), (".cs", "csharp"), (".cpp", "cpp"),
-                           (".c", "cpp"), (".js", "javascript"), (".ts", "javascript")]:
-                for root, dirs, files in os.walk(repo_dir):
-                    if any(f.endswith(ext) for f in files):
-                        lang = l
-                        break
-                else:
-                    continue
-                break
-
-            result = subprocess.run(
-                ["codeql", "database", "create", db_dir, f"--source-root={repo_dir}", f"--language={lang}", "--overwrite"],
-                **run_kw
-            )
-            if result.returncode != 0:
-                return False, result.stdout, result.stderr
-
-            result = subprocess.run(
-                ["codeql", "database", "analyze", db_dir, f"--format=sarif-latest", f"--output={output_file}"],
-                **run_kw
-            )
-            return result.returncode == 0, result.stdout, result.stderr
+            return run_codeql(repo_dir, output_file, env=env, on_progress=on_progress)
 
         elif tool == "trufflehog":
             cmd = ["trufflehog", "filesystem", repo_dir, "--json"]
@@ -182,6 +168,42 @@ def _repo_name_from_url(url):
     return name or "repo"
 
 
+def _clone_repository(repo_url, repo_dir, branch, env, tmpdir):
+    """Provide the configured PAT only to GitHub HTTPS credential requests."""
+    clone_env = dict(env)
+    clone_env["GIT_TERMINAL_PROMPT"] = "0"
+    cmd = ["git"]
+    parsed = urlparse(repo_url)
+    if (parsed.scheme == "https" and parsed.hostname == "github.com"
+            and parsed.port in (None, 443) and clone_env.get("GITHUB_TOKEN")):
+        helper_path = os.path.join(tmpdir, "git-credential-github")
+        # No token is written to disk, command arguments, or the remote URL.
+        with open(helper_path, "w") as helper:
+            helper.write(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "if len(sys.argv) != 2 or sys.argv[1] != 'get':\n"
+                "    sys.exit(0)\n"
+                "fields = dict(line.rstrip('\\n').split('=', 1) for line in sys.stdin if '=' in line)\n"
+                "if fields.get('protocol') == 'https' and fields.get('host') in ('github.com', 'github.com:443'):\n"
+                "    print('username=x-access-token')\n"
+                "    print('password=' + os.environ['GITHUB_TOKEN'])\n"
+                "    print()\n"
+            )
+        os.chmod(helper_path, 0o600)
+        # The repository tmpfs is mounted noexec. Let Python read the helper
+        # rather than asking the kernel to execute a file on that mount.
+        helper_command = f"!{shlex.quote(sys.executable)} {shlex.quote(helper_path)}"
+        cmd.extend(["-c", "credential.helper=", "-c", f"credential.helper={helper_command}"])
+    else:
+        clone_env.pop("GITHUB_TOKEN", None)
+    cmd.extend(["clone", "--depth", "1"])
+    if branch:
+        cmd.extend(["--branch", branch])
+    cmd.extend([repo_url, repo_dir])
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=clone_env)
+
+
 def run_scan(scan_id):
     """Execute a scan in a background thread."""
     scan = scans_col.find_one({"_id": scan_id})
@@ -205,12 +227,7 @@ def run_scan(scan_id):
         os.makedirs(tmpdir, exist_ok=True)
         repo_dir = os.path.join(tmpdir, repo_name)
 
-        clone_cmd = ["git", "clone", "--depth", "1"]
-        if branch:
-            clone_cmd.extend(["--branch", branch])
-        clone_cmd.extend([repo_url, repo_dir])
-
-        clone_result = subprocess.run(clone_cmd, capture_output=True, text=True, timeout=120, env=scanner_env)
+        clone_result = _clone_repository(repo_url, repo_dir, branch, scanner_env, tmpdir)
         if clone_result.returncode != 0:
             _update_scan(scan_id, status="failed",
                          error=f"Git clone failed: {clone_result.stderr[:2000]}",
@@ -233,12 +250,16 @@ def run_scan(scan_id):
                         rf.write(rule["content"])
                     custom_configs.append(rule_path)
 
-        success, stdout, stderr = _run_scanner_command(tool, repo_dir, output_file, env=scanner_env, custom_configs=custom_configs)
+        success, stdout, stderr = _run_scanner_command(
+            tool, repo_dir, output_file, env=scanner_env, custom_configs=custom_configs,
+            on_progress=lambda states: _update_scan(scan_id, codeql_languages=states),
+        )
 
         log_text = (stdout + "\n" + stderr)[:10000]
         _update_scan(scan_id, log=log_text)
 
-        if not success:
+        partial = tool == "codeql" and not success and os.path.exists(output_file)
+        if not success and not partial:
             error_lines = [l for l in stderr.strip().splitlines()
                            if not l.startswith("METRICS:") and "semgrep.dev/docs/metrics" not in l
                            and l.strip()]
@@ -253,6 +274,12 @@ def run_scan(scan_id):
         output_format = scanner_info["output_format"]
         findings = []
 
+        if output_format == "sarif" and (not os.path.isfile(output_file) or os.path.getsize(output_file) == 0):
+            _update_scan(scan_id, status="failed",
+                         error="Scanner did not produce a SARIF report. Check the scanner log for authentication or configuration errors.",
+                         completed_at=datetime.now(timezone.utc))
+            return
+
         if os.path.exists(output_file) and os.path.getsize(output_file) > 0:
             with open(output_file, "r") as f:
                 raw_text = f.read()
@@ -260,8 +287,17 @@ def run_scan(scan_id):
             if output_format == "sarif":
                 try:
                     sarif_data = json.loads(raw_text)
+                    if (not isinstance(sarif_data, dict)
+                            or not isinstance(sarif_data.get("runs"), list) or not sarif_data["runs"]
+                            or any(not isinstance(run, dict) or not isinstance(run.get("tool"), dict)
+                                   or not isinstance(run.get("results", []), list)
+                                   for run in sarif_data["runs"])):
+                        raise ValueError("Invalid SARIF report structure or missing tool runs")
+                    if any(invocation.get("executionSuccessful") is False
+                           for run in sarif_data["runs"] for invocation in run.get("invocations", [])):
+                        raise ValueError("Scanner reported an unsuccessful analysis in its SARIF report")
                     findings = parse_sarif(sarif_data)
-                except json.JSONDecodeError as e:
+                except (ValueError, TypeError, AttributeError) as e:
                     _update_scan(scan_id, status="failed",
                                  error=f"Failed to parse SARIF output: {str(e)}",
                                  completed_at=datetime.now(timezone.utc))
@@ -285,7 +321,14 @@ def run_scan(scan_id):
                                  completed_at=datetime.now(timezone.utc))
                     return
 
-        inserted, duplicates = insert_findings_for_project(project_id, findings, output_format, f"scan-{tool}")
+        for finding in findings:
+            finding["scan_id"] = str(scan_id)
+        parsed_repo = urlparse(repo_url)
+        repo_scope = (parsed_repo.netloc.lower() + parsed_repo.path.rstrip("/").removesuffix(".git")
+                      + "@" + (branch or "HEAD"))
+        inserted, duplicates = insert_findings_for_project(
+            project_id, findings, output_format, f"scan-{tool}", correlate=True,
+            repo_scope=repo_scope, repo_dir=repo_dir)
 
         completed = datetime.now(timezone.utc)
         started = scan.get("started_at")
@@ -294,10 +337,12 @@ def run_scan(scan_id):
         duration = (completed - started).total_seconds() if started else 0
 
         _update_scan(scan_id,
-                     status="completed",
+                     status="partial" if partial else "completed",
+                     error=stderr[:6000] if partial else "",
                      completed_at=completed,
                      duration_seconds=round(duration, 1),
                      findings_count=inserted,
+                     observations_count=len(findings),
                      duplicates_count=duplicates)
 
     except subprocess.TimeoutExpired:
