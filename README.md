@@ -10,7 +10,7 @@ Web app to manage and review security findings from SARIF and JSON files. Run sc
 
 | Tool               | Status | Command                                                                       |
 |------------------  |--------|-------------------------------------------------------------------------------|
-| Semgrep / Opengrep | Tested | `semgrep scan --sarif --sarif-output=scan.sarif`                              |
+| Semgrep            | Tested | `semgrep scan --sarif --sarif-output=scan.sarif`                              |
 | CodeQL             | Tested | `codeql database analyze codeql-db codeql/python-queries:codeql-suites/python-security-extended.qls --format=sarifv2.1.0 --output=scan.sarif` (Python example) |
 | Snyk Open Source   | Supported | `snyk test --all-projects --sarif-file-output=scan.sarif`                  |
 | Snyk Code          | Supported | `snyk code test --sarif-file-output=scan.sarif`                            |
