@@ -9,6 +9,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 from codeql_runner import run_codeql
@@ -140,14 +141,14 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
             return run_codeql(repo_dir, output_file, env=env, on_progress=on_progress)
 
         elif tool == "trufflehog":
-            cmd = ["trufflehog", "filesystem", repo_dir, "--json"]
+            cmd = ["trufflehog", "git", Path(repo_dir).resolve().as_uri(), "--json"]
             result = subprocess.run(cmd, **run_kw)
             with open(output_file, "w") as f:
                 f.write(result.stdout)
-            return True, result.stdout, result.stderr
+            return result.returncode == 0, result.stdout, result.stderr
 
         elif tool == "gitleaks":
-            cmd = ["gitleaks", "detect", f"--source={repo_dir}", "--report-format=json", f"--report-path={output_file}"]
+            cmd = ["gitleaks", "detect", f"--source={repo_dir}", "--log-opts=--all", "--report-format=json", f"--report-path={output_file}"]
             result = subprocess.run(cmd, **run_kw)
             return result.returncode in (0, 1), result.stdout, result.stderr
 
@@ -197,11 +198,11 @@ def _clone_repository(repo_url, repo_dir, branch, env, tmpdir):
         cmd.extend(["-c", "credential.helper=", "-c", f"credential.helper={helper_command}"])
     else:
         clone_env.pop("GITHUB_TOKEN", None)
-    cmd.extend(["clone", "--depth", "1"])
+    cmd.append("clone")
     if branch:
         cmd.extend(["--branch", branch])
     cmd.extend([repo_url, repo_dir])
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=clone_env)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=clone_env)
 
 
 def run_scan(scan_id):

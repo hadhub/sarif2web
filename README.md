@@ -108,10 +108,10 @@ The app can clone a Git repo and run scanners directly from the UI. Select a pro
 | Snyk Open Source | **Required** | Runs `snyk test --all-projects` to check dependencies for vulnerabilities and license issues. |
 | Snyk Code | **Required** | Runs `snyk code test` to check source code for security vulnerabilities. Requires Snyk Code access. |
 | CodeQL     | No             | Detects all supported languages, creates one database per language, runs extended security queries, merges SARIF reports. |
-| TruffleHog | No             | Scans the filesystem for leaked secrets.                                                     |
+| TruffleHog | No             | Scans Git history for leaked secrets.                                                       |
 | Gitleaks   | No             | Fast regex + entropy-based secret detection.                                                 |
 
-Integrated scans use a shallow clone (`--depth 1`). TruffleHog runs against the cloned filesystem; Gitleaks runs against the available Git history. These scans do not inspect the repository's complete historical commit range. The example commands in [Supported Tools](#supported-tools) can also be used to generate reports for manual upload.
+Integrated scans clone the full Git history, including remote branches and tags. TruffleHog scans the local repository in Git mode; Gitleaks scans all fetched refs (`--log-opts=--all`). Selecting a branch sets the checked-out files for code scanners without restricting the history fetched for secret scanners. Cloning has a 30-minute timeout; large histories require more time and space in the repository tmpfs (8 GiB shared by concurrent scans). The example commands in [Supported Tools](#supported-tools) can also be used to generate reports for manual upload.
 
 Gitleaks JSON reports containing `[]` are valid successful scans with no findings. They are no longer mistaken for SARIF or shown as parsing failures. Non-empty reports must contain the expected Gitleaks fields in every entry.
 
