@@ -21,19 +21,19 @@ Any tool that outputs valid SARIF should work.
 
 ## Screenshots
 
-These screenshots show the earlier interface. The current UI uses a slate and mint palette, a compact project header, overview counters and larger finding text.
+These screenshots show the current interface (slate and mint palette), populated from the demo files in [`demo_files/`](demo_files/). Regenerate with `node scripts/screenshots.js`.
 
 Dashboard
-![Dashboard dark](screenshots/s1.png)
+![Dashboard](screenshots/dashboard.png)
 
-Filters & triage
-![Filters](screenshots/s4.png)
+Finding code-flow graph
+![Finding graph](screenshots/finding-graph.png)
 
-Graph view
-![Graph](screenshots/s3.png)
+Upload dialog
+![Upload dialog](screenshots/upload-dialog.png)
 
-Drag & drop upload
-![Upload](screenshots/s5.png)
+Settings
+![Settings](screenshots/settings.png)
 
 ## Features
 
