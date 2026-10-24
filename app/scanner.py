@@ -51,12 +51,14 @@ def _validate_repo_url(url):
     if not hostname:
         return False
 
-    # Resolve hostname to IP and block private/reserved ranges
+    # Resolve hostname to IP and block non-public ranges (private, loopback,
+    # link-local, multicast, reserved). is_global keeps NAT64/DNS64 networks
+    # (64:ff9b::/96) working while still rejecting internal addresses.
     try:
         addr_info = socket.getaddrinfo(hostname, None)
         for _, _, _, _, sockaddr in addr_info:
             ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+            if not ip.is_global:
                 return False
     except (socket.gaierror, ValueError):
         return False
