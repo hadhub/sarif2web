@@ -1,3 +1,4 @@
+import fcntl
 import ipaddress
 import json
 import os
@@ -30,6 +31,10 @@ SCANNERS = {
 SETTINGS_KEYS = ["snyk_token", "github_token", "semgrep_token"]
 
 SCAN_REPO_BASE = "/tmp/scan_repos"
+
+# File lock serializing `semgrep ci` runs so a single process installs the
+# Semgrep Pro Engine; concurrent runs race on the fixed .tmp_download path.
+SEMGREP_CI_LOCK = "/tmp/semgrep_ci.lock"
 
 scan_executor = ThreadPoolExecutor(max_workers=2)
 
@@ -116,7 +121,17 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
                 ci_kw["cwd"] = repo_dir
                 cmd = ["semgrep", "ci", "--no-suppress-errors", "--sarif",
                        f"--sarif-output={output_file}", "--timeout=300"]
-                result = subprocess.run(cmd, **ci_kw)
+                # Serialize `semgrep ci`: the first run downloads and installs
+                # the Pro Engine to a fixed path; concurrent runs in the same
+                # container race on that file (corrupting it or removing it
+                # under each other). A file lock lets one process install it,
+                # then later runs detect it via check_if_installed() and skip.
+                with open(SEMGREP_CI_LOCK, "w") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    try:
+                        result = subprocess.run(cmd, **ci_kw)
+                    finally:
+                        fcntl.flock(lock, fcntl.LOCK_UN)
                 if any(message in (result.stderr or "").lower()
                        for message in ("invalid api key", "api token not valid", "http 401")):
                     return False, "", (
