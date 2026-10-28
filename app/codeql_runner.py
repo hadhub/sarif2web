@@ -67,9 +67,11 @@ def run_codeql(repo_dir, output_file, env=None, on_progress=None):
         command_env.pop(key, None)
     threads = command_env.get("CODEQL_THREADS", "2")
     ram = command_env.get("CODEQL_RAM", "2048")
-    timeout = command_env.get("CODEQL_TIMEOUT", "1800")
-    if not all(value.isdecimal() and int(value) > 0 for value in (threads, ram, timeout)):
-        return False, "", "CODEQL_THREADS, CODEQL_RAM and CODEQL_TIMEOUT must be positive integers."
+    timeout = command_env.get("CODEQL_TIMEOUT", "0")
+    if not all(value.isdecimal() and int(value) > 0 for value in (threads, ram)):
+        return False, "", "CODEQL_THREADS and CODEQL_RAM must be positive integers."
+    if not (timeout.isdecimal() and int(timeout) >= 0):
+        return False, "", "CODEQL_TIMEOUT must be a non-negative integer (0 disables the timeout)."
 
     states = [{"language": language, "status": "pending", "error": ""} for language in languages]
     logs, errors, runs = [], [], []
@@ -81,7 +83,7 @@ def run_codeql(repo_dir, output_file, env=None, on_progress=None):
     def execute(cmd, language, stage):
         logs.append(f"[{language}] {stage}")
         result = subprocess.run(cmd, cwd=repo_dir, env=command_env, capture_output=True,
-                                text=True, timeout=int(timeout))
+                                text=True, timeout=None if int(timeout) == 0 else int(timeout))
         logs.append((result.stdout or "")[-6000:])
         logs.append((result.stderr or "")[-6000:])
         if result.returncode:

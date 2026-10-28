@@ -26,6 +26,7 @@ SCANNERS = {
     "codeql":     {"cmd": "codeql", "output_format": "sarif",       "description": "GitHub CodeQL: detects all supported languages and runs extended security queries. Swift requires macOS. Results from successful languages are kept if another language fails."},
     "trufflehog": {"cmd": "trufflehog", "output_format": "trufflehog", "description": "Scans for leaked secrets, API keys, and credentials in git history."},
     "gitleaks":   {"cmd": "gitleaks", "output_format": "gitleaks",  "description": "Fast secret scanner using regex and entropy detection."},
+    "owasp-grep": {"cmd": "python3", "output_format": "sarif",       "description": "Lightweight OWASP sink grep (16 rules) — raw sink flags for manual review; no exploitability conclusion."},
 }
 
 SETTINGS_KEYS = ["snyk_token", "github_token", "semgrep_token"]
@@ -101,8 +102,7 @@ def _get_scanner_env(settings=None):
 
 def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=None, on_progress=None):
     """Run the appropriate scanner command and return (success, stdout, stderr)."""
-    timeout = 1800
-    run_kw = dict(capture_output=True, text=True, timeout=timeout)
+    run_kw = dict(capture_output=True, text=True)
     if env is not None:
         run_kw["env"] = env
 
@@ -120,7 +120,7 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
                 ci_kw["env"] = ci_env
                 ci_kw["cwd"] = repo_dir
                 cmd = ["semgrep", "ci", "--no-suppress-errors", "--sarif",
-                       f"--sarif-output={output_file}", "--timeout=300"]
+                       f"--sarif-output={output_file}", "--timeout=0"]
                 # Serialize `semgrep ci`: the first run downloads and installs
                 # the Pro Engine to a fixed path; concurrent runs in the same
                 # container race on that file (corrupting it or removing it
@@ -138,9 +138,9 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
                         "Semgrep rejected the configured API token. Update the Semgrep token in Settings "
                         "and retry, or remove it to use the default public rules.")
             if not use_ci:
-                subprocess.run(["semgrep", "logout"], capture_output=True, text=True, timeout=10)
+                subprocess.run(["semgrep", "logout"], capture_output=True, text=True)
                 cmd = ["semgrep", "scan", "--config=p/default"] + extra_configs + [
-                       "--metrics=off", "--timeout=300", "--sarif", f"--sarif-output={output_file}", repo_dir]
+                       "--metrics=off", "--timeout=0", "--sarif", f"--sarif-output={output_file}", repo_dir]
                 result = subprocess.run(cmd, **run_kw)
             return result.returncode in (0, 1), result.stdout, result.stderr
 
@@ -168,6 +168,11 @@ def _run_scanner_command(tool, repo_dir, output_file, env=None, custom_configs=N
             cmd = ["gitleaks", "detect", f"--source={repo_dir}", "--log-opts=--all", "--report-format=json", f"--report-path={output_file}"]
             result = subprocess.run(cmd, **run_kw)
             return result.returncode in (0, 1), result.stdout, result.stderr
+
+        elif tool == "owasp-grep":
+            cmd = ["python3", "/app/owasp_grep.py", repo_dir, "-o", output_file]
+            result = subprocess.run(cmd, **run_kw)
+            return result.returncode == 0, result.stdout, result.stderr
 
         else:
             return False, "", f"Unknown scanner: {tool}"
@@ -219,7 +224,7 @@ def _clone_repository(repo_url, repo_dir, branch, env, tmpdir):
     if branch:
         cmd.extend(["--branch", branch])
     cmd.extend([repo_url, repo_dir])
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=clone_env)
+    return subprocess.run(cmd, capture_output=True, text=True, env=clone_env)
 
 
 def run_scan(scan_id):
@@ -363,10 +368,6 @@ def run_scan(scan_id):
                      observations_count=len(findings),
                      duplicates_count=duplicates)
 
-    except subprocess.TimeoutExpired:
-        _update_scan(scan_id, status="failed",
-                     error="Scanner timed out (30 min limit)",
-                     completed_at=datetime.now(timezone.utc))
     except Exception as e:
         _update_scan(scan_id, status="failed",
                      error=str(e)[:2000],
