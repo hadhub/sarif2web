@@ -1201,8 +1201,10 @@ function renderTable() {
     // Snippet
     const tdSnip = document.createElement('td');
     tdSnip.className = 'snippet';
+    const dep = f.dependency || {};
+    const depLabel = (dep.package && dep.version) ? (dep.package + '@' + dep.version) : '';
     tdSnip.title = f.message || '';
-    tdSnip.textContent = f.snippet || (f.message ? f.message.substring(0, 80) : '');
+    tdSnip.textContent = f.snippet || depLabel || (f.message ? f.message.substring(0, 80) : '');
     tr.appendChild(tdSnip);
 
     // Tool

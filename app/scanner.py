@@ -33,6 +33,14 @@ SETTINGS_KEYS = ["snyk_token", "github_token", "semgrep_token"]
 
 SCAN_REPO_BASE = "/tmp/scan_repos"
 
+# Persistent bare-mirror store (disk-backed named volume) shared by every scan
+# of the same repo, so the network fetch happens once instead of once per scanner.
+MIRROR_BASE = "/mirrors"
+
+# Secret scanners inspect git history and therefore need the full clone; every
+# other scanner only reads the working tree and can use a shallow clone.
+SECRET_TOOLS = {"trufflehog", "gitleaks"}
+
 # File lock serializing `semgrep ci` runs so a single process installs the
 # Semgrep Pro Engine; concurrent runs race on the fixed .tmp_download path.
 SEMGREP_CI_LOCK = "/tmp/semgrep_ci.lock"
@@ -191,15 +199,18 @@ def _repo_name_from_url(url):
     return name or "repo"
 
 
-def _clone_repository(repo_url, repo_dir, branch, env, tmpdir):
-    """Provide the configured PAT only to GitHub HTTPS credential requests."""
+def _github_credential_prefix(url, helper_dir, env):
+    """Return (git -c prefix, env) injecting a GitHub PAT helper for github.com HTTPS.
+
+    The PAT is exposed only through a credential helper for GitHub HTTPS requests;
+    it is never written into command arguments or the remote URL.
+    """
     clone_env = dict(env)
     clone_env["GIT_TERMINAL_PROMPT"] = "0"
-    cmd = ["git"]
-    parsed = urlparse(repo_url)
+    parsed = urlparse(url)
     if (parsed.scheme == "https" and parsed.hostname == "github.com"
             and parsed.port in (None, 443) and clone_env.get("GITHUB_TOKEN")):
-        helper_path = os.path.join(tmpdir, "git-credential-github")
+        helper_path = os.path.join(helper_dir, "git-credential-github")
         # No token is written to disk, command arguments, or the remote URL.
         with open(helper_path, "w") as helper:
             helper.write(
@@ -214,16 +225,65 @@ def _clone_repository(repo_url, repo_dir, branch, env, tmpdir):
                 "    print()\n"
             )
         os.chmod(helper_path, 0o600)
-        # The repository tmpfs is mounted noexec. Let Python read the helper
-        # rather than asking the kernel to execute a file on that mount.
+        # The repo tmpfs is mounted noexec. Let Python read the helper rather
+        # than asking the kernel to execute a file on that mount.
         helper_command = f"!{shlex.quote(sys.executable)} {shlex.quote(helper_path)}"
-        cmd.extend(["-c", "credential.helper=", "-c", f"credential.helper={helper_command}"])
+        return (["-c", "credential.helper=", "-c", f"credential.helper={helper_command}"], clone_env)
+    clone_env.pop("GITHUB_TOKEN", None)
+    return ([], clone_env)
+
+
+def _ensure_mirror(repo_url, repo_name, env):
+    """Create or refresh the persistent bare mirror for a repo.
+
+    Every scanner of the same repo shares this one mirror, so the network fetch
+    happens once per repo instead of once per scanner. Returns the mirror path,
+    or None on failure (the caller then falls back to a direct clone).
+    """
+    try:
+        os.makedirs(MIRROR_BASE, exist_ok=True)
+    except OSError:
+        return None
+    mirror_path = os.path.join(MIRROR_BASE, f"{repo_name}.git")
+    lock_path = os.path.join(MIRROR_BASE, f".{repo_name}.lock")
+    prefix, clone_env = _github_credential_prefix(repo_url, MIRROR_BASE, env)
+    with open(lock_path, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            if os.path.isdir(mirror_path):
+                cmd = ["git"] + prefix + ["-C", mirror_path, "fetch", "--prune", "origin"]
+            else:
+                cmd = ["git"] + prefix + ["clone", "--mirror", repo_url, mirror_path]
+            result = subprocess.run(cmd, capture_output=True, text=True, env=clone_env)
+            return mirror_path if result.returncode == 0 else None
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _clone_repository(repo_url, repo_dir, branch, env, tmpdir, shallow):
+    """Clone the working tree, preferring the shared local mirror.
+
+    Non-secret scanners (`shallow=True`) clone only the branch tip because they
+    read the working tree, not git history. Secret scanners keep full history.
+    """
+    repo_name = _repo_name_from_url(repo_url)
+    mirror_path = _ensure_mirror(repo_url, repo_name, env)
+    if mirror_path:
+        # file:// transport keeps --depth effective; a plain local path makes git
+        # ignore --depth and (cross-filesystem) copy the full history into tmpfs.
+        source = Path(mirror_path).resolve().as_uri()
+        clone_env = dict(env)
+        clone_env["GIT_TERMINAL_PROMPT"] = "0"
+        cmd = ["git", "clone"]
     else:
-        clone_env.pop("GITHUB_TOKEN", None)
-    cmd.append("clone")
+        source = repo_url
+        prefix, clone_env = _github_credential_prefix(repo_url, tmpdir, env)
+        cmd = ["git"] + prefix + ["clone"]
+    if shallow:
+        cmd.extend(["--depth", "1"])
     if branch:
         cmd.extend(["--branch", branch])
-    cmd.extend([repo_url, repo_dir])
+    cmd.extend([source, repo_dir])
     return subprocess.run(cmd, capture_output=True, text=True, env=clone_env)
 
 
@@ -250,7 +310,9 @@ def run_scan(scan_id):
         os.makedirs(tmpdir, exist_ok=True)
         repo_dir = os.path.join(tmpdir, repo_name)
 
-        clone_result = _clone_repository(repo_url, repo_dir, branch, scanner_env, tmpdir)
+        clone_result = _clone_repository(
+            repo_url, repo_dir, branch, scanner_env, tmpdir,
+            shallow=(tool not in SECRET_TOOLS))
         if clone_result.returncode != 0:
             _update_scan(scan_id, status="failed",
                          error=f"Git clone failed: {clone_result.stderr[:2000]}",

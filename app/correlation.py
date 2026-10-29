@@ -9,6 +9,13 @@ from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 
+# Snyk Code emits per-run UUIDs as SARIF fingerprints (e.g. "identity" and
+# "snyk/asset/finding/v1"); they are not stable across scans, unlike real
+# hashes, so exclude them from the correlation key.
+_FINGERPRINT_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -45,7 +52,9 @@ def issue_key(finding):
     line = finding.get("start_line")
     location = [file, line, finding.get("end_line") or line]
     dependency = finding.get("dependency") or {}
-    if all(dependency.get(k) for k in ("vulnerability", "package", "version")) and file:
+    # When a rule_id is present it is the most stable key; a populated dependency
+    # is then display-only (e.g. Snyk), so version drift does not split the issue.
+    if all(dependency.get(k) for k in ("vulnerability", "package", "version")) and file and not finding.get("rule_id"):
         return digest(["dependency", file, dependency])
     secret = finding.get("secret_hash")
     if secret and file and line:
@@ -62,11 +71,14 @@ def issue_key(finding):
         if snippet and finding.get("cwes"):
             return digest(["code", finding["cwes"], evidence])
         fingerprints = {k: v for k, v in (finding.get("scanner_fingerprints") or {}).items()
-                        if v and str(v).lower() not in {"requires login", "unknown"}}
+                        if v and str(v).lower() not in {"requires login", "unknown"}
+                        and not _FINGERPRINT_UUID.match(str(v))}
         fingerprint = finding.get("fingerprint")
         if fingerprint and str(fingerprint).lower() not in {"requires login", "unknown"}:
             fingerprints["primary"] = fingerprint
-        if finding.get("rule_id") and finding.get("source_tool") and (snippet or fingerprints):
+        # Dependency findings (e.g. Snyk) carry a stable rule_id but no snippet or
+        # fingerprint; key them on rule_id + location instead of a random UUID.
+        if finding.get("rule_id") and finding.get("source_tool"):
             return digest(["tool", finding["source_tool"], finding["rule_id"], evidence, fingerprints])
     return "unmatched:" + uuid4().hex
 

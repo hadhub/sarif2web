@@ -16,6 +16,8 @@ services:
       - mongo
     tmpfs:
       - /tmp/scan_repos:size=8G
+    volumes:
+      - mirror_data:/mirrors
     restart: unless-stopped
 
   nginx:
@@ -30,3 +32,4 @@ services:
 
 volumes:
   mongo_data:
+  mirror_data:

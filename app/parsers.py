@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 
 
 def detect_format(raw_text):
@@ -236,6 +237,23 @@ def parse_sarif(sarif_data):
                 "package": properties.get("packageName"),
                 "version": properties.get("packageVersion"),
             }
+
+            # Snyk Open Source keeps package/version only in rule text, e.g.
+            # fullDescription "(CVE-2026-93687) braces@3.0.2" and help markdown
+            # "* Vulnerable module: braces"; result.properties has none of it.
+            if not all(dependency.values()) and tool_name == "Snyk Open Source":
+                full_desc = (rule.get("fullDescription") or {}).get("text", "")
+                help_md = (rule.get("help") or {}).get("markdown", "")
+                cve = re.search(r"CVE-\d{4}-\d+", full_desc)
+                pkg_ver = re.search(r"([^()\s]+)@(\d[^()\s]*)\s*$", full_desc)
+                vuln_module = re.search(r"\* Vulnerable module:\s*(\S+)", help_md)
+                dependency["vulnerability"] = (dependency["vulnerability"]
+                                               or (cve.group(0) if cve else rule_id))
+                dependency["package"] = (dependency["package"]
+                                         or (vuln_module.group(1) if vuln_module else "")
+                                         or (pkg_ver.group(1) if pkg_ver else ""))
+                dependency["version"] = (dependency["version"]
+                                         or (pkg_ver.group(2) if pkg_ver else ""))
 
             level = result.get("level")
             if not level or level == "none":

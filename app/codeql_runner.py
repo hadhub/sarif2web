@@ -110,9 +110,21 @@ def run_codeql(repo_dir, output_file, env=None, on_progress=None):
             state["status"] = "creating"
             state["build_mode"] = mode
             notify()
-            execute(["codeql", "database", "create", database, f"--source-root={repo_dir}",
-                     f"--language={language}", f"--build-mode={mode}", f"--threads={threads}",
-                     f"--ram={ram}", "--overwrite"], language, "database creation")
+            create_cmd = ["codeql", "database", "create", database, f"--source-root={repo_dir}",
+                          f"--language={language}", f"--build-mode={mode}", f"--threads={threads}",
+                          f"--ram={ram}", "--overwrite"]
+            try:
+                execute(create_cmd, language, "database creation")
+            except RuntimeError:
+                if mode != "autobuild":
+                    raise
+                # Fall back to source-only extraction when autobuild fails
+                # (e.g. Android projects without an SDK in the scanner image).
+                fallback_cmd = [c if not c.startswith("--build-mode=") else "--build-mode=none"
+                                for c in create_cmd]
+                state["build_mode"] = "none"
+                notify()
+                execute(fallback_cmd, language, "database creation (fallback: none)")
             state["status"] = "analyzing"
             notify()
             suite = f"codeql/{pack}-queries:codeql-suites/{pack}-security-extended.qls"
